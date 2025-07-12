@@ -1,21 +1,13 @@
-# maze.py
-
 import random
 import pygame
 from utils.settings import MAZE_COLS, MAZE_ROWS, CELL_SIZE
-
-class Cell:
-    def __init__(self, x, y):
-        self.x, self.y = x, y
-        self.walls = {'top': True, 'right': True, 'bottom': True, 'left': True}
-        self.visited = False
+from cell import Cell  # Using modular Cell definition
 
 class Maze:
     def __init__(self):
         self.cols = MAZE_COLS
         self.rows = MAZE_ROWS
-        self.grid = [[Cell(x, y) for y in range(self.rows)] for x in range(self.cols)]
-        self.generate_prims()
+        self.grid = self.generate_prims()
 
     def get_cell(self, x, y):
         if 0 <= x < self.cols and 0 <= y < self.rows:
@@ -42,11 +34,30 @@ class Maze:
         cell2.walls[opposites[direction]] = False
 
     def generate_prims(self):
-        start = self.get_cell(random.randint(0, self.cols - 1), random.randint(0, self.rows - 1))
+        # Initialize grid
+        grid = [[Cell(x, y) for y in range(self.rows)] for x in range(self.cols)]
+
+        # Start from random cell
+        start = grid[random.randint(0, self.cols - 1)][random.randint(0, self.rows - 1)]
         start.visited = True
         frontier = []
 
-        for direction, neighbor in self.get_neighbors(start):
+        def local_neighbors(c):
+            directions = [
+                ('top', c.x, c.y - 1),
+                ('right', c.x + 1, c.y),
+                ('bottom', c.x, c.y + 1),
+                ('left', c.x - 1, c.y),
+            ]
+            neighbors = []
+            for direction, nx, ny in directions:
+                if 0 <= nx < self.cols and 0 <= ny < self.rows:
+                    neighbor = grid[nx][ny]
+                    if not neighbor.visited:
+                        neighbors.append((direction, neighbor))
+            return neighbors
+
+        for direction, neighbor in local_neighbors(start):
             frontier.append((start, direction, neighbor))
 
         while frontier:
@@ -57,27 +68,38 @@ class Maze:
                 self.remove_walls(current, next_cell, direction)
                 next_cell.visited = True
 
-                for dir2, neighbor2 in self.get_neighbors(next_cell):
+                for dir2, neighbor2 in local_neighbors(next_cell):
                     frontier.append((next_cell, dir2, neighbor2))
 
-    # Entrance and exit
-        entrance = self.get_cell(0, 0)
-        entrance.walls['left'] = False
-        exit = self.get_cell(self.cols - 1, self.rows - 1)
-        exit.walls['right'] = False
+        # Entrance and exit
+        grid[0][0].walls['left'] = False
+        grid[self.cols - 1][self.rows - 1].walls['right'] = False
 
+        return grid
 
-    def draw(self, screen):
+    def draw(self, screen, camera, visited_cells):
         for x in range(self.cols):
             for y in range(self.rows):
+                cx = x * CELL_SIZE
+                cy = y * CELL_SIZE
                 cell = self.grid[x][y]
-                px = x * CELL_SIZE
-                py = y * CELL_SIZE
+
+                if (x, y) in visited_cells:
+                    pygame.draw.rect(screen, (20, 20, 20), camera.apply(pygame.Rect(cx, cy, CELL_SIZE, CELL_SIZE)))
+
                 if cell.walls['top']:
-                    pygame.draw.line(screen, (255, 255, 255), (px, py), (px + CELL_SIZE, py), 2)
+                    pygame.draw.line(screen, (255, 255, 255),
+                                     camera.apply(pygame.Rect(cx, cy, CELL_SIZE, 2)).topleft,
+                                     camera.apply(pygame.Rect(cx + CELL_SIZE, cy, CELL_SIZE, 2)).topleft, 2)
                 if cell.walls['right']:
-                    pygame.draw.line(screen, (255, 255, 255), (px + CELL_SIZE, py), (px + CELL_SIZE, py + CELL_SIZE), 2)
+                    pygame.draw.line(screen, (255, 255, 255),
+                                     camera.apply(pygame.Rect(cx + CELL_SIZE, cy, 2, CELL_SIZE)).topleft,
+                                     camera.apply(pygame.Rect(cx + CELL_SIZE, cy + CELL_SIZE, 2, CELL_SIZE)).topleft, 2)
                 if cell.walls['bottom']:
-                    pygame.draw.line(screen, (255, 255, 255), (px + CELL_SIZE, py + CELL_SIZE), (px, py + CELL_SIZE), 2)
+                    pygame.draw.line(screen, (255, 255, 255),
+                                     camera.apply(pygame.Rect(cx, cy + CELL_SIZE, CELL_SIZE, 2)).topleft,
+                                     camera.apply(pygame.Rect(cx + CELL_SIZE, cy + CELL_SIZE, CELL_SIZE, 2)).topleft, 2)
                 if cell.walls['left']:
-                    pygame.draw.line(screen, (255, 255, 255), (px, py + CELL_SIZE), (px, py), 2)
+                    pygame.draw.line(screen, (255, 255, 255),
+                                     camera.apply(pygame.Rect(cx, cy, 2, CELL_SIZE)).topleft,
+                                     camera.apply(pygame.Rect(cx, cy + CELL_SIZE, 2, CELL_SIZE)).topleft, 2)

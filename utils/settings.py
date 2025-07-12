@@ -7,7 +7,8 @@ info = pygame.display.Info()
 SCREEN_WIDTH = info.current_w
 SCREEN_HEIGHT = info.current_h
 
-CELL_SIZE = 20
+CELL_SIZE = 32
+PLAYER_SIZE = 20
 MAZE_COLS = SCREEN_WIDTH // CELL_SIZE
 MAZE_ROWS = SCREEN_HEIGHT // CELL_SIZE
 
