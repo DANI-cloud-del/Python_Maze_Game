@@ -3,55 +3,72 @@ import sys
 from maze import Maze
 from player import Player
 from camera import Camera
-from utils.settings import SCREEN_WIDTH, SCREEN_HEIGHT, FPS, CELL_SIZE
+from utils.settings import *  # This imports all constants from settings
 
-def main():
-    pygame.init()
-    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-    pygame.display.set_caption("Maze Light Explorer")
-    clock = pygame.time.Clock()
-
-    maze = Maze()
-    camera = Camera()
-
-    px = CELL_SIZE + (CELL_SIZE - 20) // 2
-    py = CELL_SIZE + (CELL_SIZE - 20) // 2
-    player = Player(px, py)
-
-    visited_cells = set()
-
-    running = True
-    while running:
+class Game:
+    def __init__(self):
+        pygame.init()
+        self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+        pygame.display.set_caption("Top-Down Maze Explorer")
+        self.clock = pygame.time.Clock()
+        
+        self.maze = Maze()
+        self.camera = Camera()
+        
+        # Start player at center of maze
+        start_x = (self.maze.cols // 2) * CELL_SIZE + (CELL_SIZE - PATH_WIDTH)//2
+        start_y = (self.maze.rows // 2) * CELL_SIZE + (CELL_SIZE - PATH_WIDTH)//2
+        self.player = Player(start_x, start_y)
+        
+        self.visited_cells = set()
+        self.update_visited_cells()
+        
+    def update_visited_cells(self):
+        cell_x = self.player.rect.centerx // CELL_SIZE
+        cell_y = self.player.rect.centery // CELL_SIZE
+        
+        # Reveal cells in a radius around player
+        for dx in range(-VISIBLE_RADIUS, VISIBLE_RADIUS+1):
+            for dy in range(-VISIBLE_RADIUS, VISIBLE_RADIUS+1):
+                if (0 <= cell_x + dx < self.maze.cols and 
+                    0 <= cell_y + dy < self.maze.rows):
+                    self.visited_cells.add((cell_x + dx, cell_y + dy))
+        
+    def handle_events(self):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                running = False
-
+                pygame.quit()
+                sys.exit()
+                
+    def update(self):
         keys = pygame.key.get_pressed()
-        player.handle_input(keys)
-        player.move(maze)
-
-        cell_x = player.rect.centerx // CELL_SIZE
-        cell_y = player.rect.centery // CELL_SIZE
-        visited_cells.add((cell_x, cell_y))
-
-        camera.follow(player)
-
-        screen.fill((0, 0, 0))
-
-        maze.draw(screen, camera, visited_cells)
-        player.draw(screen, camera)
-
-        # 🔦 Lighting Mask
-        fog = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-        fog.fill((0, 0, 0, 220))
-        pygame.draw.circle(fog, (0, 0, 0, 0), (SCREEN_WIDTH//2, SCREEN_HEIGHT//2), 120)
-        screen.blit(fog, (0, 0))
-
+        self.player.handle_input(keys)
+        self.player.move(self.maze)
+        self.update_visited_cells()
+        self.camera.follow(self.player)
+        
+    def draw(self):
+        # Dark background
+        self.screen.fill(FOG_COLOR)
+        
+        # Draw visited maze areas
+        self.maze.draw(self.screen, self.camera, self.visited_cells)
+        
+        # Draw player
+        self.player.draw(self.screen, self.camera)
+        
+        # Apply lighting effect
+        self.player.draw_light(self.screen, self.camera)
+        
         pygame.display.flip()
-        clock.tick(FPS)
-
-    pygame.quit()
-    sys.exit()
+        
+    def run(self):
+        while True:
+            self.handle_events()
+            self.update()
+            self.draw()
+            self.clock.tick(FPS)
 
 if __name__ == "__main__":
-    main()
+    game = Game()
+    game.run()
