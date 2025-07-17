@@ -1,42 +1,57 @@
 import pygame
 import os
 
-def slice_sprite_sheet(sheet_path, columns, rows, resize_to=None):
+def load_character_sheet(sheet_path):
     """
-    Slices a sprite sheet into frames by grid layout.
-    Returns: frames[row][col] where each row is a direction, and each col is a frame.
+    Loads any-size sprite sheet using a 4x4 grid layout.
+    Maps directions as:
+    Row 0 → down
+    Row 1 → left
+    Row 2 → right
+    Row 3 → up
     """
-    try:
-        if not os.path.exists(sheet_path):
-            raise FileNotFoundError(f"Sprite sheet not found at: {sheet_path}")
-        
-        sheet = pygame.image.load(sheet_path).convert_alpha()
-        sheet_width, sheet_height = sheet.get_size()
-        frame_width = sheet_width // columns
-        frame_height = sheet_height // rows
+    if not os.path.exists(sheet_path):
+        raise FileNotFoundError(f"Sprite sheet not found: {sheet_path}")
 
-        print("\n=== Sprite Sheet Info ===")
-        print(f"📂 Path: {sheet_path}")
-        print(f"📐 Size: {sheet_width}x{sheet_height}")
-        print(f"🔢 Grid: {columns} cols × {rows} rows")
-        print(f"🖼️ Frame: {frame_width}x{frame_height}")
-        if resize_to:
-            print(f"⚖️ Resize: {resize_to[0]}x{resize_to[1]}")
+    sheet = pygame.image.load(sheet_path).convert_alpha()
+    sheet_width, sheet_height = sheet.get_size()
 
-        frames = []
-        for row in range(rows):
-            row_frames = []
-            for col in range(columns):
-                rect = pygame.Rect(col * frame_width, row * frame_height, frame_width, frame_height)
-                frame = sheet.subsurface(rect)
-                if resize_to:
-                    frame = pygame.transform.scale(frame, resize_to)
-                row_frames.append(frame)
-            frames.append(row_frames)
+    COLS = 4
+    ROWS = 4
+    FRAME_WIDTH = sheet_width // COLS
+    FRAME_HEIGHT = sheet_height // ROWS
+    FRAME_SIZE = (FRAME_WIDTH, FRAME_HEIGHT)
 
-        print(f"✅ Loaded {len(frames)} directions with {len(frames[0])} frames each")
-        return frames
+    # Revised animation layout
+    ANIMATIONS = {
+        "walk_down":  {'row': 0, 'frames': 4},
+        "walk_left":  {'row': 1, 'frames': 4},
+        "walk_right": {'row': 2, 'frames': 4},
+        "walk_up":    {'row': 3, 'frames': 4},
 
-    except Exception as e:
-        print(f"❌ Failed to load sprite sheet: {e}")
-        raise
+        "idle_down":  {'row': 0, 'frames': 1},
+        "idle_left":  {'row': 1, 'frames': 1},
+        "idle_right": {'row': 2, 'frames': 1},
+        "idle_up":    {'row': 3, 'frames': 1}
+    }
+
+    frames = {}
+    for name, data in ANIMATIONS.items():
+        row_frames = []
+        y = data['row'] * FRAME_HEIGHT
+        for col in range(data['frames']):
+            x = col * FRAME_WIDTH
+            frame = sheet.subsurface(pygame.Rect(x, y, FRAME_WIDTH, FRAME_HEIGHT))
+            row_frames.append(frame)
+        frames[name] = row_frames
+
+    return {
+        "sheet": sheet,
+        "frames": frames,
+        "metadata": {
+            "frame_size": FRAME_SIZE,
+            "grid": (COLS, ROWS),
+            "animations": ANIMATIONS,
+            "anchor_point": (FRAME_WIDTH // 2, int(FRAME_HEIGHT * 0.9))
+        }
+    }
