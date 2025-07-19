@@ -8,7 +8,7 @@ screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 pygame.display.set_caption("Character Animation Tester")
 clock = pygame.time.Clock()
 
-SHEET_PATH = os.path.join("assets", "sprites", "character", "player.png")
+SHEET_PATH = os.path.join("assets", "sprites", "character", "grass_boss.png")
 data = load_character_sheet(SHEET_PATH)
 frames = data["frames"]
 frame_size = data["metadata"]["frame_size"]
