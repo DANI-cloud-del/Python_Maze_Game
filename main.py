@@ -1,9 +1,12 @@
 import pygame
 import sys
+import random
 from maze import Maze
-from player import Player, PlayerState  # Added PlayerState import
+from player import Player, PlayerState
 from camera import Camera
 from utils.settings import *
+from collision import Collision
+from navigator import Navigator
 from enum import Enum
 
 class GameState(Enum):
@@ -17,7 +20,6 @@ class Game:
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
         pygame.display.set_caption("Horror Maze")
         self.clock = pygame.time.Clock()
-        
         self.reset_game()
         
     def reset_game(self):
@@ -34,6 +36,9 @@ class Game:
         self.update_visited_cells()
         self.state = GameState.RUNNING
         self.game_time = 0
+        self.navigator = Navigator(self.maze)
+        self.show_navigator = False
+        self.current_algorithm = "a_star"
         
     def handle_events(self):
         for event in pygame.event.get():
@@ -46,6 +51,43 @@ class Game:
                     sys.exit()
                 elif self.state != GameState.RUNNING and event.key == pygame.K_r:
                     self.reset_game()
+                elif event.key == pygame.K_n:  # Toggle navigator
+                    self.show_navigator = not self.show_navigator
+                    self.navigator.visible = self.show_navigator
+                    if self.show_navigator:
+                        self.navigator.set_algorithm(self.current_algorithm)
+                        self.navigator.update(
+                            (self.player.rect.centerx, self.player.rect.centery),
+                            self.player.direction,
+                            True
+                        )
+                elif event.key == pygame.K_1:  # Switch to DFS
+                    self.current_algorithm = "dfs"
+                    if self.show_navigator:
+                        self.navigator.set_algorithm("dfs")
+                        self.navigator.update(
+                            (self.player.rect.centerx, self.player.rect.centery),
+                            self.player.direction,
+                            True
+                        )
+                elif event.key == pygame.K_2:  # Switch to BFS
+                    self.current_algorithm = "bfs"
+                    if self.show_navigator:
+                        self.navigator.set_algorithm("bfs")
+                        self.navigator.update(
+                            (self.player.rect.centerx, self.player.rect.centery),
+                            self.player.direction,
+                            True
+                        )
+                elif event.key == pygame.K_3:  # Switch to A*
+                    self.current_algorithm = "a_star"
+                    if self.show_navigator:
+                        self.navigator.set_algorithm("a_star")
+                        self.navigator.update(
+                            (self.player.rect.centerx, self.player.rect.centery),
+                            self.player.direction,
+                            True
+                        )
                 
     def update(self):
         if self.state != GameState.RUNNING:
@@ -75,29 +117,66 @@ class Game:
                 self.player.rect.y = tele_y * CELL_SIZE + (CELL_SIZE - PATH_WIDTH)//2
                 
             elif cell_effect == "maze_reset":
-                pass  # Maze already reset by check_special_cells
+                self.maze.reset_maze()
+                player_cell_x = self.player.rect.centerx // CELL_SIZE
+                player_cell_y = self.player.rect.centery // CELL_SIZE
+                safe_x, safe_y = self.find_nearest_valid_position(player_cell_x, player_cell_y)
+                self.player.rect.x = safe_x * CELL_SIZE + (CELL_SIZE - PATH_WIDTH)//2
+                self.player.rect.y = safe_y * CELL_SIZE + (CELL_SIZE - PATH_WIDTH)//2
                 
             elif cell_effect == "exit":
                 self.state = GameState.VICTORY
         
         # Update enemies
-        self.maze.update_enemies(
-            (self.player.rect.centerx, self.player.rect.centery),
-            self.player.direction,
-            self.player.light_on
-        )
-        
-        # Check for enemy collisions
         player_cell_x = self.player.rect.centerx // CELL_SIZE
         player_cell_y = self.player.rect.centery // CELL_SIZE
         
         for enemy in self.maze.enemies:
+            enemy.update_visibility(
+                player_cell_x, 
+                player_cell_y,
+                self.player.direction,
+                self.player.light_on
+            )
+            
+            if not enemy.visible or random.random() > 0.8:
+                enemy.move_toward_player(
+                    player_cell_x,
+                    player_cell_y,
+                    self.maze
+                )
+            
             if (enemy.x == player_cell_x and enemy.y == player_cell_y and 
                 not self.player.light_on):
                 if self.player.take_damage(30):
                     pass
                 if self.player.health <= 0:
                     self.state = GameState.GAME_OVER
+
+        # Update navigator
+        if self.show_navigator:
+            self.navigator.update(
+                (self.player.rect.centerx, self.player.rect.centery),
+                self.player.direction
+            )
+
+    def find_nearest_valid_position(self, start_x, start_y):
+        """Find nearest cell where player won't collide with walls"""
+        for radius in range(0, 5):  # Check current cell first, then expand outward
+            for dx in range(-radius, radius+1):
+                for dy in range(-radius, radius+1):
+                    x, y = start_x + dx, start_y + dy
+                    if 0 <= x < self.maze.cols and 0 <= y < self.maze.rows:
+                        # Create test rect for this cell
+                        test_rect = pygame.Rect(
+                            x * CELL_SIZE + (CELL_SIZE - PATH_WIDTH)//2,
+                            y * CELL_SIZE + (CELL_SIZE - PATH_WIDTH)//2,
+                            PLAYER_SIZE,
+                            PLAYER_SIZE
+                        )
+                        if not Collision.check_player_wall_collision(test_rect, self.maze):
+                            return x, y
+        return self.maze.start_pos  # Fallback to start position if no valid cell found
     
     def update_visited_cells(self):
         cell_x = self.player.rect.centerx // CELL_SIZE
@@ -121,6 +200,10 @@ class Game:
                 self.player.direction,
                 (self.player.rect.centerx, self.player.rect.centery)
             )
+            
+            # Draw navigator path if active
+            if self.show_navigator:
+                self.navigator.draw(self.screen, self.camera)
             
             # Draw player
             self.player.draw(self.screen, self.camera)
@@ -157,8 +240,13 @@ class Game:
         
         # Instructions
         font_small = pygame.font.SysFont(None, 24)
-        light_text = font_small.render("F: Toggle Light", True, (200, 200, 200))
-        self.screen.blit(light_text, (20, SCREEN_HEIGHT - 30))
+        light_text = font_small.render("F: Toggle Light | N: Navigator | 1-3: Algorithms", True, (200, 200, 200))
+        self.screen.blit(light_text, (20, SCREEN_HEIGHT - 60))
+        
+        # Algorithm info
+        if self.show_navigator:
+            algo_text = font_small.render(f"Current Algorithm: {self.current_algorithm.upper()}", True, (200, 200, 200))
+            self.screen.blit(algo_text, (20, SCREEN_HEIGHT - 30))
     
     def draw_game_over(self):
         font_large = pygame.font.SysFont(None, 72)
