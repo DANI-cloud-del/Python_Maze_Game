@@ -10,21 +10,52 @@ class Navigator:
         self.current_target = None
         self.visible = False
         self.position = None
-        self.light_radius = 150
-        self.light_surface = self.create_light_surface()
         self.algorithm = "a_star"  # Default algorithm
-        
-    def create_light_surface(self):
-        surface = pygame.Surface((self.light_radius*2, self.light_radius*2), pygame.SRCALPHA)
-        for radius in range(self.light_radius, 0, -10):
-            alpha = int(200 * (radius/self.light_radius))
-            pygame.draw.circle(surface, (255, 255, 255, alpha), 
-                             (self.light_radius, self.light_radius), radius)
-        return surface
+        self.normal_color = (255, 255, 255)  # White
+        self.alert_color = (255, 0, 0)       # Red
+        self.current_color = self.normal_color
+        self.last_enemy_check = 0
+        self.enemy_check_interval = 500  # ms between enemy checks
+        self.follow_mode = False  # Toggle between pathfinding and follow modes
+        self.follow_distance = 2  # Cells behind player to follow
+        self.last_player_direction = None
+        self.smooth_position = None  # For smooth movement
+        self.speed = 0.05  # Movement speed (0-1)
+
+    def toggle_follow_mode(self):
+        """Toggle between pathfinding and follow modes"""
+        self.follow_mode = not self.follow_mode
+        if self.follow_mode:
+            self.path = []  # Clear path when switching to follow mode
+            self.current_target = None
         
     def set_algorithm(self, algorithm):
         self.algorithm = algorithm
         
+    def check_for_enemies(self, current_time):
+        """Check if enemies are nearby and update color accordingly"""
+        if current_time - self.last_enemy_check < self.enemy_check_interval:
+            return
+            
+        self.last_enemy_check = current_time
+        
+        if not self.position:
+            self.current_color = self.normal_color
+            return
+            
+        # Convert position to cell coordinates
+        bot_cell_x = int(self.position[0] / CELL_SIZE)
+        bot_cell_y = int(self.position[1] / CELL_SIZE)
+        
+        # Check for enemies in adjacent cells
+        enemy_nearby = False
+        for enemy in self.maze.enemies:
+            if abs(enemy.x - bot_cell_x) <= 1 and abs(enemy.y - bot_cell_y) <= 1:
+                enemy_nearby = True
+                break
+                
+        self.current_color = self.alert_color if enemy_nearby else self.normal_color
+    
     def find_path(self, start, end):
         if self.algorithm == "dfs":
             return self.dfs(start, end)
@@ -97,46 +128,117 @@ class Navigator:
                                          (nx, ny), path + [(nx, ny)]))
         return []
     
-    def update(self, player_pos, player_direction, force_recalculate=False):
+    def calculate_follow_position(self, player_pos, player_direction):
+        """Calculate position behind the player based on direction"""
+        player_cell_x = player_pos[0] // CELL_SIZE
+        player_cell_y = player_pos[1] // CELL_SIZE
+        
+        # Convert direction to vector (inverted for following behind)
+        if player_direction == "up":
+            dx, dy = 0, self.follow_distance
+        elif player_direction == "down":
+            dx, dy = 0, -self.follow_distance
+        elif player_direction == "left":
+            dx, dy = self.follow_distance, 0
+        elif player_direction == "right":
+            dx, dy = -self.follow_distance, 0
+        else:
+            dx, dy = 0, 0
+        
+        # Calculate target cell behind player
+        target_x = player_cell_x + dx
+        target_y = player_cell_y + dy
+        
+        # Ensure target is within bounds and accessible
+        target_x = max(0, min(target_x, self.maze.cols - 1))
+        target_y = max(0, min(target_y, self.maze.rows - 1))
+        
+        # Check if the target cell is accessible
+        if not self.is_cell_accessible(target_x, target_y):
+            # Try adjacent cells if primary target is blocked
+            for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
+                alt_x, alt_y = player_cell_x + dx, player_cell_y + dy
+                if (0 <= alt_x < self.maze.cols and 0 <= alt_y < self.maze.rows and
+                    self.is_cell_accessible(alt_x, alt_y)):
+                    target_x, target_y = alt_x, alt_y
+                    break
+        
+        # Convert back to pixel coordinates
+        return (
+            target_x * CELL_SIZE + CELL_SIZE//2,
+            target_y * CELL_SIZE + CELL_SIZE//2
+        )
+    
+    def is_cell_accessible(self, x, y):
+        """Check if a cell is accessible (not blocked by walls from adjacent cells)"""
+        # Check all four possible wall configurations
+        accessible = True
+        if x > 0 and self.maze.grid[x][y].walls['left']:
+            accessible = False
+        if x < self.maze.cols-1 and self.maze.grid[x][y].walls['right']:
+            accessible = False
+        if y > 0 and self.maze.grid[x][y].walls['top']:
+            accessible = False
+        if y < self.maze.rows-1 and self.maze.grid[x][y].walls['bottom']:
+            accessible = False
+        return accessible
+    
+    def update(self, player_pos, player_direction, current_time, force_recalculate=False):
         if not self.visible:
             return
             
+        # Check for nearby enemies
+        self.check_for_enemies(current_time)
+            
         player_cell = (player_pos[0] // CELL_SIZE, player_pos[1] // CELL_SIZE)
         
-        # If player is following the bot or we need to recalculate
-        if force_recalculate or not self.path or player_cell == self.path[0]:
-            self.path = self.find_path(player_cell, self.maze.exit_pos)
-            if self.path and len(self.path) > 1:
-                self.current_target = self.path[1]  # Next cell to move to
-                self.path = self.path[1:]  # Remove current position
-            else:
-                self.current_target = None
-        
-        # Update bot position to stay near player
-        if self.current_target:
-            target_x, target_y = self.current_target
-            self.position = (
-                target_x * CELL_SIZE + CELL_SIZE//2,
-                target_y * CELL_SIZE + CELL_SIZE//2
+        if self.follow_mode:
+            # In follow mode, just calculate position behind player
+            target_pos = self.calculate_follow_position(player_pos, player_direction)
+            
+            # Smooth movement toward target
+            if self.smooth_position is None:
+                self.smooth_position = self.position if self.position else target_pos
+            
+            # Calculate direction vector
+            dx = target_pos[0] - self.smooth_position[0]
+            dy = target_pos[1] - self.smooth_position[1]
+            
+            # Move toward target
+            self.smooth_position = (
+                self.smooth_position[0] + dx * self.speed,
+                self.smooth_position[1] + dy * self.speed
             )
-    
+            
+            self.position = self.smooth_position
+        else:
+            # In pathfinding mode (original behavior with some improvements)
+            if force_recalculate or not self.path or player_cell == self.path[0]:
+                self.path = self.find_path(player_cell, self.maze.exit_pos)
+                if self.path and len(self.path) > 1:
+                    self.current_target = self.path[1]  # Next cell to move to
+                    self.path = self.path[1:]  # Remove current position
+                else:
+                    self.current_target = None
+            
+            # Update bot position to stay near player
+            if self.current_target:
+                target_x, target_y = self.current_target
+                self.position = (
+                    target_x * CELL_SIZE + CELL_SIZE//2,
+                    target_y * CELL_SIZE + CELL_SIZE//2
+                )
+
     def draw(self, screen, camera):
         if not self.visible or not self.position:
             return
             
-        # Draw glowing light
-        light_pos = (
-            self.position[0] - self.light_radius,
-            self.position[1] - self.light_radius
-        )
-        screen.blit(self.light_surface, camera.apply_pos(light_pos))
-        
-        # Draw bot (simple circle)
+        # Draw bot (simple circle with color based on enemy proximity)
         adjusted_pos = camera.apply_pos(self.position)
-        pygame.draw.circle(screen, (255, 255, 255), adjusted_pos, 10)
+        pygame.draw.circle(screen, self.current_color, adjusted_pos, 10)
         
-        # Draw path (optional)
-        if self.path:
+        # Draw path if we're in pathfinding mode and have a path
+        if not self.follow_mode and self.path:
             for i, (x, y) in enumerate(self.path):
                 if i < len(self.path) - 1:  # Don't draw line to exit
                     next_x, next_y = self.path[i+1]

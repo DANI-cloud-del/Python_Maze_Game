@@ -55,12 +55,14 @@ class Game:
                     self.show_navigator = not self.show_navigator
                     self.navigator.visible = self.show_navigator
                     if self.show_navigator:
-                        self.navigator.set_algorithm(self.current_algorithm)
                         self.navigator.update(
                             (self.player.rect.centerx, self.player.rect.centery),
                             self.player.direction,
-                            True
+                            pygame.time.get_ticks()
                         )
+                elif event.key == pygame.K_f:  # Toggle follow mode (added)
+                    if self.show_navigator:
+                        self.navigator.toggle_follow_mode()
                 elif event.key == pygame.K_1:  # Switch to DFS
                     self.current_algorithm = "dfs"
                     if self.show_navigator:
@@ -157,7 +159,8 @@ class Game:
         if self.show_navigator:
             self.navigator.update(
                 (self.player.rect.centerx, self.player.rect.centery),
-                self.player.direction
+                self.player.direction,
+                pygame.time.get_ticks()
             )
 
     def find_nearest_valid_position(self, start_x, start_y):
@@ -247,6 +250,13 @@ class Game:
         if self.show_navigator:
             algo_text = font_small.render(f"Current Algorithm: {self.current_algorithm.upper()}", True, (200, 200, 200))
             self.screen.blit(algo_text, (20, SCREEN_HEIGHT - 30))
+
+        if self.show_navigator:
+            follow_text = font_small.render(
+                f"Follow Mode: {'ON' if self.navigator.follow_mode else 'OFF'}", 
+                True, (200, 200, 200)
+            )
+            self.screen.blit(follow_text, (20, SCREEN_HEIGHT - 90))
     
     def draw_game_over(self):
         font_large = pygame.font.SysFont(None, 72)
