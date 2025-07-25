@@ -7,6 +7,7 @@ from camera import Camera
 from utils.settings import *
 from collision import Collision
 from navigator import Navigator
+from menu import GameMenu
 from enum import Enum
 
 class GameState(Enum):
@@ -15,15 +16,31 @@ class GameState(Enum):
     VICTORY = 2
 
 class Game:
-    def __init__(self):
+    def __init__(self, settings=None):
         pygame.init()
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
         pygame.display.set_caption("Horror Maze")
         self.clock = pygame.time.Clock()
+        self.settings = settings if settings else self.get_default_settings()
         self.reset_game()
         
+    def get_default_settings(self):
+        return {
+            "algorithm": "a_star",
+            "difficulty": "medium",
+            "enemy_count": 5,
+            "maze_size": (20, 20),
+            "trap_damage": 20
+        }
+        
     def reset_game(self):
-        self.maze = Maze()
+        # Use settings from menu
+        self.maze = Maze(
+            cols=self.settings["maze_size"][0],
+            rows=self.settings["maze_size"][1],
+            enemy_count=self.settings["enemy_count"],
+            trap_damage=self.settings["trap_damage"]
+        )
         self.camera = Camera()
         
         # Start player at maze start position
@@ -37,8 +54,9 @@ class Game:
         self.state = GameState.RUNNING
         self.game_time = 0
         self.navigator = Navigator(self.maze)
+        self.navigator.set_algorithm(self.settings["algorithm"])
         self.show_navigator = False
-        self.current_algorithm = "a_star"
+        self.current_algorithm = self.settings["algorithm"]
         
     def handle_events(self):
         for event in pygame.event.get():
@@ -297,6 +315,18 @@ class Game:
             self.draw()
             self.clock.tick(FPS)
 
+def main():
+    pygame.init()
+    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+    pygame.display.set_caption("Horror Maze")
+    
+    # Show menu first
+    menu = GameMenu(screen)
+    settings = menu.run()
+    
+    if settings:  # User didn't quit
+        game = Game(settings)
+        game.run()
+
 if __name__ == "__main__":
-    game = Game()
-    game.run()
+    main()

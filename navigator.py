@@ -21,6 +21,11 @@ class Navigator:
         self.last_player_direction = None
         self.smooth_position = None  # For smooth movement
         self.speed = 0.05  # Movement speed (0-1)
+        self.last_player_cell = None  # To track player movement
+        self.current_direction = None  # Current suggested direction
+        self.next_direction = None  # Next suggested direction
+        self.direction_changed = False  # Flag for direction change
+        self.deviation_threshold = 1  # Cells player can deviate before recalculating
 
     def toggle_follow_mode(self):
         """Toggle between pathfinding and follow modes"""
@@ -128,6 +133,51 @@ class Navigator:
                                          (nx, ny), path + [(nx, ny)]))
         return []
     
+    def calculate_directions(self, player_cell):
+        """Calculate current and next directions based on path"""
+        if len(self.path) < 2:
+            self.current_direction = None
+            self.next_direction = None
+            return
+            
+        # Current direction (from player to next cell)
+        next_cell = self.path[0]
+        dx = next_cell[0] - player_cell[0]
+        dy = next_cell[1] - player_cell[1]
+        self.current_direction = self.vector_to_direction((dx, dy))
+        
+        # Next direction (from next cell to following cell)
+        if len(self.path) > 1:
+            following_cell = self.path[1]
+            dx = following_cell[0] - next_cell[0]
+            dy = following_cell[1] - next_cell[1]
+            self.next_direction = self.vector_to_direction((dx, dy))
+        else:
+            self.next_direction = None
+    
+    def vector_to_direction(self, vector):
+        """Convert a movement vector to a direction string"""
+        dx, dy = vector
+        if dx == 1:
+            return "right"
+        elif dx == -1:
+            return "left"
+        elif dy == 1:
+            return "down"
+        elif dy == -1:
+            return "up"
+        return None
+    
+    def has_player_deviated(self, player_cell):
+        """Check if player has moved away from the suggested path"""
+        if not self.path or len(self.path) < 1:
+            return True
+            
+        # Check if player is at expected position or adjacent
+        expected_cell = self.path[0]
+        distance = abs(player_cell[0] - expected_cell[0]) + abs(player_cell[1] - expected_cell[1])
+        return distance > self.deviation_threshold
+    
     def calculate_follow_position(self, player_pos, player_direction):
         """Calculate position behind the player based on direction"""
         player_cell_x = player_pos[0] // CELL_SIZE
@@ -212,14 +262,28 @@ class Navigator:
             
             self.position = self.smooth_position
         else:
-            # In pathfinding mode (original behavior with some improvements)
-            if force_recalculate or not self.path or player_cell == self.path[0]:
+            # In pathfinding mode with turn-by-turn directions
+            player_moved = (self.last_player_cell != player_cell)
+            self.last_player_cell = player_cell
+            
+            # Recalculate path if:
+            # 1. Forced to recalculate
+            # 2. No path exists
+            # 3. Player has reached the next cell in path
+            # 4. Player has deviated from the path
+            if (force_recalculate or not self.path or 
+                (player_moved and len(self.path) > 0 and player_cell == self.path[0]) or
+                self.has_player_deviated(player_cell)):
+                
                 self.path = self.find_path(player_cell, self.maze.exit_pos)
-                if self.path and len(self.path) > 1:
-                    self.current_target = self.path[1]  # Next cell to move to
-                    self.path = self.path[1:]  # Remove current position
+                if self.path:
+                    self.current_target = self.path[0]  # Next cell to move to
                 else:
                     self.current_target = None
+            
+            # Calculate directions for navigation hints
+            if player_moved and self.path:
+                self.calculate_directions(player_cell)
             
             # Update bot position to stay near player
             if self.current_target:
@@ -251,3 +315,4 @@ class Navigator:
                         next_y * CELL_SIZE + CELL_SIZE//2
                     ))
                     pygame.draw.line(screen, (0, 255, 0, 150), start_pos, end_pos, 3)
+        # Navigation arrows removed

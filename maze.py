@@ -5,17 +5,18 @@ from enemy import Enemy
 from utils.settings import *
 
 class Maze:
-    def __init__(self):
-        self.cols = MAZE_COLS * 2
-        self.rows = MAZE_ROWS * 2
+    def __init__(self, cols=None, rows=None, enemy_count=5, trap_damage=20):
+        self.cols = cols if cols else MAZE_COLS * 2
+        self.rows = rows if rows else MAZE_ROWS * 2
         self.grid = self.generate_maze()
         self.enemies = []
         self.start_pos = (0, 0)
         self.exit_pos = (self.cols-1, self.rows-1)
         self.reset_time = 0
         self.reset_cooldown = 10000
+        self.trap_damage = trap_damage
         self.generate_special_cells()
-        self.generate_enemies()
+        self.generate_enemies(enemy_count)
 
     def generate_maze(self):
         grid = [[Cell(x, y) for y in range(self.rows)] for x in range(self.cols)]
@@ -79,9 +80,8 @@ class Maze:
                     self.grid[x][y].type = CellType.BUTTON
                     break
 
-    def generate_enemies(self):
+    def generate_enemies(self, enemy_count):
         """Generate enemies at random positions"""
-        enemy_count = 5
         for _ in range(enemy_count):
             while True:
                 x, y = random.randint(0, self.cols-1), random.randint(0, self.rows-1)

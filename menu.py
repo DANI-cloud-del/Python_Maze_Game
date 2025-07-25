@@ -1,7 +1,44 @@
-# menu.py
 import pygame
 import sys
+import random
+import math
 from pygame.locals import *
+
+class VortexParticle:
+    def __init__(self, center):
+        self.angle = random.uniform(0, 2 * math.pi)
+        self.radius = random.uniform(50, 150)
+
+        # 🔻 Slow movement — really subtle now
+        self.speed = random.uniform(0.0008, 0.0025)
+
+        self.base_size = random.uniform(1.5, 3.0)
+        self.size = self.base_size
+        self.center = center
+        self.color = (150, 200, 255)
+
+        # ✨ Optional pulsing
+        self.pulse_speed = random.uniform(0.008, 0.015)
+        self.pulse_range = random.uniform(0.3, 1.0)
+        self.phase_offset = random.uniform(0, math.pi * 2)
+
+    def update(self):
+        self.angle += self.speed
+        time = pygame.time.get_ticks()
+        self.size = self.base_size + math.sin(time * self.pulse_speed + self.phase_offset) * self.pulse_range
+
+    def draw(self, surface):
+        x = self.center[0] + math.cos(self.angle) * self.radius
+        y = self.center[1] + math.sin(self.angle) * self.radius
+
+        # Optional glow
+        glow = pygame.Surface((int(self.size * 4), int(self.size * 4)), pygame.SRCALPHA)
+        pygame.draw.circle(glow, (*self.color, 60), (int(self.size * 2), int(self.size * 2)), int(self.size * 2))
+        surface.blit(glow, (x - self.size * 2, y - self.size * 2))
+
+        # Core dot
+        pygame.draw.circle(surface, self.color, (int(x), int(y)), max(1, int(self.size)))
+
 
 class GameMenu:
     def __init__(self, screen):
@@ -12,12 +49,16 @@ class GameMenu:
         self.selected_difficulty = "Medium"
         self.algorithm_type = "search"  # "search" or "non-search"
         
+        # Initialize vortex particles
+        self.center = (self.width // 2, self.height // 2)
+        self.vortex_particles = [VortexParticle(self.center) for _ in range(80)]
+        
         # Colors
         self.colors = {
             "title": (0, 200, 200),
             "normal": (255, 255, 255),
             "highlight": (0, 255, 0),
-            "background": (20, 20, 40)
+            "background": (10, 10, 20)  # Darker background to match vortex
         }
         
         # Fonts
@@ -43,24 +84,28 @@ class GameMenu:
             "difficulty": 1  # Default to Medium
         }
         
-        # Algorithm descriptions
-        self.algorithm_descriptions = {
-            "DFS": "Depth-First Search: Explores deep paths first",
-            "BFS": "Breadth-First Search: Finds shortest path",
-            "A*": "A* Search: Optimal path with heuristics",
-            "Dijkstra": "Dijkstra: Handles weighted paths",
-            "Wall-Follower": "Follows walls (right-hand rule)",
-            "Random Walk": "Moves randomly with slight bias",
-            "Potential Fields": "Attracted to goal, repelled by walls",
-            "Genetic": "Evolutionary pathfinding approach"
-        }
-        
         # Difficulty settings
         self.difficulty_settings = {
             "Easy": {"enemies": 3, "maze_size": (15, 15), "trap_damage": 10},
             "Medium": {"enemies": 5, "maze_size": (20, 20), "trap_damage": 20},
             "Hard": {"enemies": 8, "maze_size": (25, 25), "trap_damage": 30}
         }
+
+    def update_vortex(self):
+        for particle in self.vortex_particles:
+            particle.update()
+
+    def draw_vortex(self):
+        # Create a semi-transparent surface for the vortex
+        vortex_surface = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        vortex_surface.fill((10, 10, 20, 200))  # Semi-transparent dark background
+        
+        # Draw particles
+        for particle in self.vortex_particles:
+            particle.draw(vortex_surface)
+        
+        # Blit the vortex surface onto the screen
+        self.screen.blit(vortex_surface, (0, 0))
 
     def draw_text(self, text, font, color, y_offset=0, x_offset=0):
         text_surface = font.render(text, True, color)
@@ -70,7 +115,9 @@ class GameMenu:
         return text_surface.get_rect(topleft=(x, y))
 
     def draw_menu(self):
-        self.screen.fill(self.colors["background"])
+        # Draw vortex background
+        self.update_vortex()
+        self.draw_vortex()
         
         # Draw title
         self.draw_text("Maze Solving Game", self.title_font, self.colors["title"], -100)
@@ -102,10 +149,6 @@ class GameMenu:
             for i, algo in enumerate(algorithms):
                 color = self.colors["highlight"] if i == self.cursor_pos[self.state] else self.colors["normal"]
                 self.draw_text(algo, self.submenu_font, color, 120 + i * 40)
-                
-                # Draw description
-                desc = self.algorithm_descriptions[algo]
-                self.draw_text(desc, self.submenu_font, self.colors["normal"], 120 + i * 40, 200)
                 
         elif self.state == "difficulty":
             for i, option in enumerate(self.options["difficulty"]):
@@ -202,7 +245,28 @@ class GameMenu:
     def run(self):
         """Main menu loop - returns when game should start"""
         while True:
+            for event in pygame.event.get():
+                if event.type == QUIT:
+                    pygame.quit()
+                    sys.exit()
+                    
+                if event.type == KEYDOWN:
+                    if event.key == K_ESCAPE:
+                        if self.state == "main":
+                            return None  # Return None if user quits
+                        else:
+                            self.state = "main"
+                            
+                    elif event.key == K_DOWN:
+                        self.move_cursor(1)
+                        
+                    elif event.key == K_UP:
+                        self.move_cursor(-1)
+                        
+                    elif event.key == K_RETURN:
+                        result = self.select_option()
+                        if result == "start_game":
+                            return self.get_game_settings()
+            
             self.draw_menu()
-            result = self.handle_input()
-            if result == "start_game":
-                return self.get_game_settings()
+            pygame.display.update()
