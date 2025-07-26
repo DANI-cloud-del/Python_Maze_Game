@@ -1,6 +1,8 @@
 import pygame
 from utils.settings import *
 from enum import Enum
+from shooting import ShootingSystem
+
 
 class PlayerState(Enum):
     NORMAL = 0
@@ -25,6 +27,12 @@ class Player:
         self.torch_battery = 100
         self.last_damage_time = 0
         self.invulnerable_time = 1000  # ms after taking damage
+        self.shooting_system = ShootingSystem(self)
+        self.jumping = False
+        self.jump_height = 0
+        self.max_jump = CELL_SIZE // 2
+        self.on_ground = True
+        self.jump_cooldown = 0
     
     def create_light_mask(self):
         mask = pygame.Surface((LIGHT_RADIUS*2, LIGHT_RADIUS*2), pygame.SRCALPHA)
@@ -47,20 +55,40 @@ class Player:
         elif keys[pygame.K_DOWN] or keys[pygame.K_s]:
             self.direction = pygame.Vector2(0, 1)
         
+        # Jumping
+        if (keys[pygame.K_SPACE] and self.on_ground and 
+            pygame.time.get_ticks() > self.jump_cooldown):
+            self.jumping = True
+            self.on_ground = False
+            self.jump_cooldown = pygame.time.get_ticks() + 1000  # 1 second cooldown
+            
         # Toggle light
-        if keys[pygame.K_f] and self.torch_battery > 0:
+        if keys[pygame.K_f]:
             self.light_on = not self.light_on
         
     def move(self, maze):
         if self.state != PlayerState.NORMAL:
             return
             
+        # Handle jumping
+        if self.jumping:
+            self.jump_height += 4
+            if self.jump_height >= self.max_jump:
+                self.jumping = False
+        elif not self.on_ground:
+            self.jump_height = max(0, self.jump_height - 4)
+            
         new_rect = self.rect.copy()
         new_rect.x += self.direction.x * self.speed
-        new_rect.y += self.direction.y * self.speed
+        new_rect.y += self.direction.y * self.speed - self.jump_height
         
         if not self.check_collision(new_rect, maze):
             self.rect = new_rect
+            self.on_ground = (self.jump_height == 0)
+        else:
+            self.on_ground = True
+            self.jump_height = 0
+            self.jumping = False
         
         # Update torch battery
         if self.light_on:
@@ -117,6 +145,7 @@ class Player:
         pygame.draw.circle(screen, color, 
                          adjusted_pos, 
                          PLAYER_SIZE//2 * camera.zoom)
+        self.shooting_system.draw(screen, camera)
         
         # Draw direction indicator
         direction_pos = (
@@ -154,3 +183,13 @@ class Player:
             (int(LIGHT_RADIUS*2 * camera.zoom), int(LIGHT_RADIUS*2 * camera.zoom))
         )
         screen.blit(scaled_light, light_pos)
+
+    def handle_mouse(self, mouse_pos, mouse_click, current_time):
+        if mouse_click and self.shooting_system.ammo > 0:
+            self.shooting_system.shoot(mouse_pos, current_time)
+
+    def jump(self):
+        if self.on_ground and pygame.time.get_ticks() > self.jump_cooldown:
+            self.jumping = True
+            self.on_ground = False
+            self.jump_cooldown = pygame.time.get_ticks() + 1000

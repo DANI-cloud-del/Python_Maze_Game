@@ -10,6 +10,7 @@ from navigator import Navigator
 from menu import GameMenu
 from enum import Enum
 from special_effects import SpecialEffects
+from doors import DoorSystem
 
 class GameState(Enum):
     RUNNING = 0
@@ -24,6 +25,7 @@ class Game:
         self.clock = pygame.time.Clock()
         self.settings = settings if settings else self.get_default_settings()
         self.reset_game()
+        self.door_system = DoorSystem(self.maze)
         
     def get_default_settings(self):
         return {
@@ -79,9 +81,12 @@ class Game:
                             self.player.direction,
                             pygame.time.get_ticks()
                         )
-                elif event.key == pygame.K_f:  # Toggle follow mode (added)
+                elif event.key == pygame.K_f:  # Toggle follow mode
                     if self.show_navigator:
                         self.navigator.toggle_follow_mode()
+                elif event.key == pygame.K_SPACE:  # Jump
+                    if self.player.state == PlayerState.NORMAL:
+                        self.player.jump()
                 elif event.key == pygame.K_1:  # Switch to DFS
                     self.current_algorithm = "dfs"
                     if self.show_navigator:
@@ -109,7 +114,15 @@ class Game:
                             self.player.direction,
                             True
                         )
-                
+            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:  # Left mouse click
+                mouse_pos = pygame.mouse.get_pos()
+                # Convert mouse position to world coordinates
+                world_mouse_pos = (
+                    mouse_pos[0] / self.camera.zoom + self.camera.display_offset.x,
+                    mouse_pos[1] / self.camera.zoom + self.camera.display_offset.y
+                )
+                self.player.handle_mouse(world_mouse_pos, True, pygame.time.get_ticks())
+
     def update(self):
         if self.state != GameState.RUNNING:
             return
@@ -122,13 +135,29 @@ class Game:
         self.update_visited_cells()
         self.camera.follow(self.player)
         
+        # Update door system
+        self.door_system.update(pygame.time.get_ticks())
+        
+        # Check door collisions
+        if self.door_system.check_collision(self.player.rect):
+            # Player hits a closed door
+            self.player.take_damage(10)
+        
         # Check for special cell effects
         cell_effect = self.maze.special_effects.check_special_cells(self.player.rect)
         if cell_effect:
             if cell_effect == "trap":
-                self.player.take_damage(self.maze.trap_damage)
-                self.player.state = PlayerState.TRAPPED
-                self.player.state_timer = pygame.time.get_ticks()
+                if not self.player.jumping:  # Only take damage if not jumping over trap
+                    self.player.take_damage(self.maze.trap_damage)
+                    self.player.state = PlayerState.TRAPPED
+                    self.player.state_timer = pygame.time.get_ticks()
+                
+            elif cell_effect == "battery":
+                self.player.torch_battery = min(100, self.player.torch_battery + 30)
+                
+            elif cell_effect == "ammo":
+                self.player.shooting_system.ammo = min(self.player.shooting_system.max_ammo, 
+                                                    self.player.shooting_system.ammo + 5)
                 
             elif isinstance(cell_effect, tuple) and cell_effect[0] == "teleport":
                 self.player.state = PlayerState.TELEPORTING
@@ -140,48 +169,32 @@ class Game:
                 
                 # Ensure player doesn't get stuck in walls
                 if self.check_collision_at_position(tele_x_px, tele_y_px):
-                    # Find nearest safe position if target is blocked
                     tele_x_px, tele_y_px = self.find_safe_teleport_position(tele_x, tele_y)
                 
                 self.player.rect.x = tele_x_px
                 self.player.rect.y = tele_y_px
-                
-                # Immediately update camera to new position
                 self.camera.follow(self.player)
-                
-                # Add the new cell to visited cells
                 self.visited_cells.add((tele_x, tele_y))
                 
             elif isinstance(cell_effect, tuple) and cell_effect[0] == "maze_reset":
-                # Get button position from the cell effect
                 button_x, button_y = cell_effect[1]
-                
-                # Reset the maze and pass the button position
                 self.maze.reset_maze((button_x, button_y))
                 
-                # Get player's current cell position
                 player_cell_x = self.player.rect.centerx // CELL_SIZE
                 player_cell_y = self.player.rect.centery // CELL_SIZE
-                
-                # Find safe position for player
                 safe_x, safe_y = self.find_nearest_valid_position(player_cell_x, player_cell_y)
                 self.player.rect.x = safe_x * CELL_SIZE + (CELL_SIZE - PATH_WIDTH)//2
                 self.player.rect.y = safe_y * CELL_SIZE + (CELL_SIZE - PATH_WIDTH)//2
-                
-                # Force camera update
                 self.camera.follow(self.player)
-                
-                # Update visited cells
                 self.visited_cells.add((safe_x, safe_y))
                 
             elif cell_effect == "exit":
                 self.state = GameState.VICTORY
 
-        # ===== ADDED ENEMY LOGIC =====
+        # Update enemies
         player_cell_x = self.player.rect.centerx // CELL_SIZE
         player_cell_y = self.player.rect.centery // CELL_SIZE
         
-        # Update enemies
         for enemy in self.maze.enemies:
             enemy.update_visibility(
                 player_cell_x, 
@@ -190,7 +203,6 @@ class Game:
                 self.player.light_on
             )
             
-            # Move enemy 80% of the time when visible, or always when not visible
             if not enemy.visible or random.random() > 0.8:
                 enemy.move_toward_player(
                     player_cell_x,
@@ -198,19 +210,22 @@ class Game:
                     self.maze
                 )
             
-            # Check for enemy collision
             if (enemy.x == player_cell_x and enemy.y == player_cell_y and 
                 not self.player.light_on):
-                if self.player.take_damage(30):  # Assuming take_damage returns True if player died
+                if self.player.take_damage(30):
                     self.state = GameState.GAME_OVER
 
-        # ===== ADDED NAVIGATOR LOGIC =====
+        # Update navigator
         if self.show_navigator:
             self.navigator.update(
                 (self.player.rect.centerx, self.player.rect.centery),
                 self.player.direction,
                 pygame.time.get_ticks()
             )
+        
+        # Update shooting system
+        self.player.shooting_system.update(self.maze.enemies)
+
     def check_collision_at_position(self, x, y):
         """Check if a position would cause collision with walls"""
         test_rect = pygame.Rect(
@@ -291,6 +306,9 @@ class Game:
                 (self.player.rect.centerx, self.player.rect.centery)
             )
             
+            # Draw doors
+            self.door_system.draw(self.screen, self.camera)
+            
             # Draw navigator path if active
             if self.show_navigator:
                 self.navigator.draw(self.screen, self.camera)
@@ -311,7 +329,7 @@ class Game:
             self.draw_victory()
         
         pygame.display.flip()
-        
+
     def draw_hud(self):
         # Health bar
         health_width = 200
@@ -323,27 +341,46 @@ class Game:
         pygame.draw.rect(self.screen, (255, 0, 0), 
                         (health_pos[0], health_pos[1], health_width * (self.player.health/100), health_height))
         
+        # Battery bar
+        battery_width = 200
+        battery_height = 10
+        battery_pos = (20, 45)
+        
+        pygame.draw.rect(self.screen, (50, 50, 50), 
+                        (battery_pos[0], battery_pos[1], battery_width, battery_height))
+        battery_color = (0, 255, 0) if self.player.torch_battery > 30 else (255, 165, 0) if self.player.torch_battery > 10 else (255, 0, 0)
+        pygame.draw.rect(self.screen, battery_color, 
+                        (battery_pos[0], battery_pos[1], battery_width * (self.player.torch_battery/100), battery_height))
+        
+        # Ammo counter
+        ammo_text = pygame.font.SysFont(None, 24).render(
+            f"Ammo: {self.player.shooting_system.ammo}/{self.player.shooting_system.max_ammo}", 
+            True, (200, 200, 200)
+        )
+        self.screen.blit(ammo_text, (20, 60))
+        
         # Time
-        font = pygame.font.SysFont(None, 36)
-        time_text = font.render(f"Time: {self.game_time//1000}s", True, (255, 255, 255))
+        time_text = pygame.font.SysFont(None, 36).render(
+            f"Time: {self.game_time//1000}s", True, (255, 255, 255))
         self.screen.blit(time_text, (SCREEN_WIDTH - 150, 20))
         
         # Instructions
         font_small = pygame.font.SysFont(None, 24)
-        light_text = font_small.render("F: Toggle Light | N: Navigator | 1-3: Algorithms", True, (200, 200, 200))
-        self.screen.blit(light_text, (20, SCREEN_HEIGHT - 60))
+        controls = [
+            "F: Toggle Light | N: Navigator | SPACE: Jump",
+            "1-3: Algorithms | LMB: Shoot | F: Toggle Follow Mode"
+        ]
         
-        # Algorithm info
+        for i, text in enumerate(controls):
+            control_text = font_small.render(text, True, (200, 200, 200))
+            self.screen.blit(control_text, (20, SCREEN_HEIGHT - 60 - i*30))
+        
+        # Algorithm and follow mode info
         if self.show_navigator:
-            algo_text = font_small.render(f"Current Algorithm: {self.current_algorithm.upper()}", True, (200, 200, 200))
+            algo_text = font_small.render(
+                f"Algorithm: {self.current_algorithm.upper()} | Follow: {'ON' if self.navigator.follow_mode else 'OFF'}", 
+                True, (200, 200, 200))
             self.screen.blit(algo_text, (20, SCREEN_HEIGHT - 30))
-
-        if self.show_navigator:
-            follow_text = font_small.render(
-                f"Follow Mode: {'ON' if self.navigator.follow_mode else 'OFF'}", 
-                True, (200, 200, 200)
-            )
-            self.screen.blit(follow_text, (20, SCREEN_HEIGHT - 90))
     
     def draw_game_over(self):
         font_large = pygame.font.SysFont(None, 72)

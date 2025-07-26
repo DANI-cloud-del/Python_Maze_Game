@@ -6,6 +6,8 @@ class CellType(Enum):
     TELEPORT = 2
     BUTTON = 3
     EXIT = 4
+    BATTERY = 5
+    AMMO = 6
 
 class Cell:
     def __init__(self, x, y):

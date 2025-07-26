@@ -15,31 +15,28 @@ class SpecialEffects:
         exit_x, exit_y = self.maze.exit_pos
         self.maze.grid[exit_x][exit_y].type = CellType.EXIT
         
-        # Generate traps (5% of cells)
-        trap_count = int(self.maze.cols * self.maze.rows * 0.05)
+        # Generate traps (3% of cells)
+        trap_count = int(self.maze.cols * self.maze.rows * 0.03)
         for _ in range(trap_count):
             while True:
                 x, y = random.randint(0, self.maze.cols-1), random.randint(0, self.maze.rows-1)
-                if (x,y) != self.maze.start_pos and (x,y) != self.maze.exit_pos:
+                if ((x,y) != self.maze.start_pos and (x,y) != self.maze.exit_pos and
+                    abs(x - exit_x) + abs(y - exit_y) > 5 and
+                    abs(x - self.maze.start_pos[0]) + abs(y - self.maze.start_pos[1]) > 5):
                     self.maze.grid[x][y].type = CellType.TRAP
                     break
         
-        # Generate teleporters (4 pairs)
-        teleport_count = 4
-        positions = []
-        
-        # First find all valid positions
+        # Generate teleporters (3 pairs)
+        teleport_count = 3
         valid_positions = []
         for x in range(self.maze.cols):
             for y in range(self.maze.rows):
                 if (x,y) != self.maze.start_pos and (x,y) != self.maze.exit_pos:
-                    # Ensure position isn't in a corner (less likely to get stuck)
                     if not (x in [0, self.maze.cols-1] and y in [0, self.maze.rows-1]):
                         valid_positions.append((x,y))
         
         random.shuffle(valid_positions)
         
-        # Create teleport pairs
         for i in range(0, teleport_count*2, 2):
             x1, y1 = valid_positions[i]
             x2, y2 = valid_positions[i+1]
@@ -48,7 +45,6 @@ class SpecialEffects:
             self.maze.grid[x1][y1].linked_teleport = (x2, y2)
             self.maze.grid[x2][y2].type = CellType.TELEPORT
             self.maze.grid[x2][y2].linked_teleport = (x1, y1)
-            
             self.teleport_pairs.append(((x1,y1), (x2,y2)))
         
         # Generate buttons
@@ -58,6 +54,24 @@ class SpecialEffects:
                 x, y = random.randint(0, self.maze.cols-1), random.randint(0, self.maze.rows-1)
                 if (x,y) != self.maze.start_pos and (x,y) != self.maze.exit_pos and self.maze.grid[x][y].type == CellType.NORMAL:
                     self.maze.grid[x][y].type = CellType.BUTTON
+                    break
+        
+        # Generate battery pickups
+        battery_count = 5
+        for _ in range(battery_count):
+            while True:
+                x, y = random.randint(0, self.maze.cols-1), random.randint(0, self.maze.rows-1)
+                if self.maze.grid[x][y].type == CellType.NORMAL:
+                    self.maze.grid[x][y].type = CellType.BATTERY
+                    break
+        
+        # Generate ammo pickups
+        ammo_count = 5
+        for _ in range(ammo_count):
+            while True:
+                x, y = random.randint(0, self.maze.cols-1), random.randint(0, self.maze.rows-1)
+                if self.maze.grid[x][y].type == CellType.NORMAL:
+                    self.maze.grid[x][y].type = CellType.AMMO
                     break
     
     def check_special_cells(self, player_rect):
@@ -69,10 +83,22 @@ class SpecialEffects:
             
         cell = self.maze.grid[x][y]
         
-        if cell.type == CellType.TRAP and not cell.triggered:
+        # Battery pickup
+        if cell.type == CellType.BATTERY:
+            cell.type = CellType.NORMAL
+            return "battery"
+        
+        # Ammo pickup
+        elif cell.type == CellType.AMMO:
+            cell.type = CellType.NORMAL
+            return "ammo"
+        
+        # Trap
+        elif cell.type == CellType.TRAP and not cell.triggered:
             cell.triggered = True
             return "trap"
         
+        # Teleporter
         elif cell.type == CellType.TELEPORT and not cell.triggered and (x,y) not in self.used_teleports:
             cell.triggered = True
             self.used_teleports.add((x,y))
@@ -81,7 +107,7 @@ class SpecialEffects:
             tele_x, tele_y = cell.linked_teleport
             self.used_teleports.add((tele_x, tele_y))
             
-            # Calculate safe landing position (center of the target cell)
+            # Calculate safe landing position
             teleport_pos = (
                 tele_x * CELL_SIZE + (CELL_SIZE - PATH_WIDTH)//2,
                 tele_y * CELL_SIZE + (CELL_SIZE - PATH_WIDTH)//2
@@ -89,13 +115,15 @@ class SpecialEffects:
             
             return "teleport", teleport_pos, (tele_x, tele_y)
         
+        # Maze reset button
         elif cell.type == CellType.BUTTON and not cell.triggered:
             current_time = pygame.time.get_ticks()
             if current_time - self.reset_time > self.reset_cooldown:
                 cell.triggered = True
                 self.reset_time = current_time
-                return "maze_reset", (x, y)  # Return button position
+                return "maze_reset", (x, y)
         
+        # Exit
         elif cell.type == CellType.EXIT:
             return "exit"
             
