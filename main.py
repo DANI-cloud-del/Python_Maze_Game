@@ -9,6 +9,7 @@ from collision import Collision
 from navigator import Navigator
 from menu import GameMenu
 from enum import Enum
+from special_effects import SpecialEffects
 
 class GameState(Enum):
     RUNNING = 0
@@ -122,35 +123,62 @@ class Game:
         self.camera.follow(self.player)
         
         # Check for special cell effects
-        cell_effect = self.maze.check_special_cells(self.player.rect)
+        cell_effect = self.maze.special_effects.check_special_cells(self.player.rect)
         if cell_effect:
             if cell_effect == "trap":
-                self.player.take_damage(20)
+                self.player.take_damage(self.maze.trap_damage)
                 self.player.state = PlayerState.TRAPPED
                 self.player.state_timer = pygame.time.get_ticks()
                 
             elif isinstance(cell_effect, tuple) and cell_effect[0] == "teleport":
                 self.player.state = PlayerState.TELEPORTING
                 self.player.state_timer = pygame.time.get_ticks()
-                tele_x, tele_y = cell_effect[1]
-                self.player.rect.x = tele_x * CELL_SIZE + (CELL_SIZE - PATH_WIDTH)//2
-                self.player.rect.y = tele_y * CELL_SIZE + (CELL_SIZE - PATH_WIDTH)//2
+                
+                # Update player position to the teleport target
+                tele_x_px, tele_y_px = cell_effect[1]
+                tele_x, tele_y = cell_effect[2]
+                
+                # Ensure player doesn't get stuck in walls
+                if self.check_collision_at_position(tele_x_px, tele_y_px):
+                    # Find nearest safe position if target is blocked
+                    tele_x_px, tele_y_px = self.find_safe_teleport_position(tele_x, tele_y)
+                
+                self.player.rect.x = tele_x_px
+                self.player.rect.y = tele_y_px
+                
+                # Immediately update camera to new position
+                self.camera.follow(self.player)
+                
+                # Add the new cell to visited cells
+                self.visited_cells.add((tele_x, tele_y))
                 
             elif cell_effect == "maze_reset":
-                self.maze.reset_maze()
+                # Get player's current cell before reset
                 player_cell_x = self.player.rect.centerx // CELL_SIZE
                 player_cell_y = self.player.rect.centery // CELL_SIZE
+                
+                # Reset the maze
+                self.maze.reset_maze((player_cell_x, player_cell_y))  # Pass button position
+                
+                # Find safe position for player
                 safe_x, safe_y = self.find_nearest_valid_position(player_cell_x, player_cell_y)
                 self.player.rect.x = safe_x * CELL_SIZE + (CELL_SIZE - PATH_WIDTH)//2
                 self.player.rect.y = safe_y * CELL_SIZE + (CELL_SIZE - PATH_WIDTH)//2
                 
+                # Force camera update
+                self.camera.follow(self.player)
+                
+                # Update visited cells
+                self.visited_cells.add((safe_x, safe_y))
+                
             elif cell_effect == "exit":
                 self.state = GameState.VICTORY
-        
-        # Update enemies
+
+        # ===== ADDED ENEMY LOGIC =====
         player_cell_x = self.player.rect.centerx // CELL_SIZE
         player_cell_y = self.player.rect.centery // CELL_SIZE
         
+        # Update enemies
         for enemy in self.maze.enemies:
             enemy.update_visibility(
                 player_cell_x, 
@@ -159,6 +187,7 @@ class Game:
                 self.player.light_on
             )
             
+            # Move enemy 80% of the time when visible, or always when not visible
             if not enemy.visible or random.random() > 0.8:
                 enemy.move_toward_player(
                     player_cell_x,
@@ -166,20 +195,57 @@ class Game:
                     self.maze
                 )
             
+            # Check for enemy collision
             if (enemy.x == player_cell_x and enemy.y == player_cell_y and 
                 not self.player.light_on):
-                if self.player.take_damage(30):
-                    pass
-                if self.player.health <= 0:
+                if self.player.take_damage(30):  # Assuming take_damage returns True if player died
                     self.state = GameState.GAME_OVER
 
-        # Update navigator
+        # ===== ADDED NAVIGATOR LOGIC =====
         if self.show_navigator:
             self.navigator.update(
                 (self.player.rect.centerx, self.player.rect.centery),
                 self.player.direction,
                 pygame.time.get_ticks()
             )
+    def check_collision_at_position(self, x, y):
+        """Check if a position would cause collision with walls"""
+        test_rect = pygame.Rect(
+            x,
+            y,
+            PLAYER_SIZE,
+            PLAYER_SIZE
+        )
+        return self.maze.check_collision(test_rect)
+
+    def find_safe_teleport_position(self, tele_x, tele_y):
+        """Find a safe position near the teleport target"""
+        # Try center first
+        center_x = tele_x * CELL_SIZE + (CELL_SIZE - PATH_WIDTH)//2
+        center_y = tele_y * CELL_SIZE + (CELL_SIZE - PATH_WIDTH)//2
+        
+        if not self.check_collision_at_position(center_x, center_y):
+            return center_x, center_y
+        
+        # Try positions around the center in a spiral pattern
+        for radius in range(1, 3):
+            for dx in [-1, 0, 1]:
+                for dy in [-1, 0, 1]:
+                    if dx == 0 and dy == 0:
+                        continue
+                        
+                    test_x = center_x + dx * (PATH_WIDTH//2)
+                    test_y = center_y + dy * (PATH_WIDTH//2)
+                    
+                    if not self.check_collision_at_position(test_x, test_y):
+                        return test_x, test_y
+        
+        # Fallback to start position if no safe position found
+        start_x, start_y = self.maze.start_pos
+        return (
+            start_x * CELL_SIZE + (CELL_SIZE - PATH_WIDTH)//2,
+            start_y * CELL_SIZE + (CELL_SIZE - PATH_WIDTH)//2
+        )
 
     def find_nearest_valid_position(self, start_x, start_y):
         """Find nearest cell where player won't collide with walls"""

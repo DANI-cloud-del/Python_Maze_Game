@@ -3,6 +3,7 @@ import pygame
 from cell import Cell, CellType
 from enemy import Enemy
 from utils.settings import *
+from special_effects import SpecialEffects
 
 class Maze:
     def __init__(self, cols=None, rows=None, enemy_count=5, trap_damage=20):
@@ -15,8 +16,9 @@ class Maze:
         self.reset_time = 0
         self.reset_cooldown = 10000
         self.trap_damage = trap_damage
-        self.generate_special_cells()
+        self.special_effects = SpecialEffects(self)  # Add this line
         self.generate_enemies(enemy_count)
+        self.special_effects.generate_special_cells()  # Add this line
 
     def generate_maze(self):
         grid = [[Cell(x, y) for y in range(self.rows)] for x in range(self.cols)]
@@ -194,36 +196,9 @@ class Maze:
             placed_buttons += 1
     
     def check_special_cells(self, player_rect):
-        """Check if player is on a special cell and trigger effects"""
-        x = player_rect.centerx // CELL_SIZE
-        y = player_rect.centery // CELL_SIZE
-        
-        if not (0 <= x < self.cols and 0 <= y < self.rows):
-            return None
-            
-        cell = self.grid[x][y]
-        
-        if cell.type == CellType.TRAP and not cell.triggered:
-            cell.triggered = True
-            return "trap"
-        
-        elif cell.type == CellType.TELEPORT and not cell.triggered:
-            cell.triggered = True
-            return "teleport", cell.linked_teleport
-        
-        elif cell.type == CellType.BUTTON and not cell.triggered:
-            current_time = pygame.time.get_ticks()
-            if current_time - self.reset_time > self.reset_cooldown:
-                cell.triggered = True
-                self.reset_time = current_time
-                # Pass the button's position to reset_maze
-                self.reset_maze((x, y))
-                return "maze_reset"
-        
-        elif cell.type == CellType.EXIT:
-            return "exit"
-            
-        return None
+        """Delegate special cell checking to SpecialEffects"""
+        return self.special_effects.check_special_cells(player_rect)
+
     def draw(self, screen, camera, visited_cells, player_direction, player_pos):
         current_time = pygame.time.get_ticks()
         
@@ -296,5 +271,24 @@ class Maze:
             return not cell.walls['top']
         elif direction == (0, 1):  # Down
             return not cell.walls['bottom']
+            
+        return False
+    
+    def check_collision(self, rect):
+        """Check if a rectangle collides with maze walls"""
+        grid_x = rect.centerx // CELL_SIZE
+        grid_y = rect.centery // CELL_SIZE
+        
+        if not (0 <= grid_x < self.cols and 0 <= grid_y < self.rows):
+            return True
+            
+        cell = self.grid[grid_x][grid_y]
+        
+        margin = (CELL_SIZE - PATH_WIDTH)//2
+        if (cell.walls['left'] and rect.left < grid_x * CELL_SIZE + margin) or \
+        (cell.walls['right'] and rect.right > (grid_x+1) * CELL_SIZE - margin) or \
+        (cell.walls['top'] and rect.top < grid_y * CELL_SIZE + margin) or \
+        (cell.walls['bottom'] and rect.bottom > (grid_y+1) * CELL_SIZE - margin):
+            return True
             
         return False
