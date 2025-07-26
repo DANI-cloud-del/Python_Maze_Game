@@ -87,7 +87,6 @@ class SpecialEffects:
                 tele_y * CELL_SIZE + (CELL_SIZE - PATH_WIDTH)//2
             )
             
-            # Add visual effect (particles/sound could be added here)
             return "teleport", teleport_pos, (tele_x, tele_y)
         
         elif cell.type == CellType.BUTTON and not cell.triggered:
@@ -95,8 +94,7 @@ class SpecialEffects:
             if current_time - self.reset_time > self.reset_cooldown:
                 cell.triggered = True
                 self.reset_time = current_time
-                return "maze_reset", (player_rect.centerx // CELL_SIZE, 
-                                    player_rect.centery // CELL_SIZE)
+                return "maze_reset", (x, y)  # Return button position
         
         elif cell.type == CellType.EXIT:
             return "exit"

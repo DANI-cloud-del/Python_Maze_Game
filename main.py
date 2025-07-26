@@ -152,13 +152,16 @@ class Game:
                 # Add the new cell to visited cells
                 self.visited_cells.add((tele_x, tele_y))
                 
-            elif cell_effect == "maze_reset":
-                # Get player's current cell before reset
+            elif isinstance(cell_effect, tuple) and cell_effect[0] == "maze_reset":
+                # Get button position from the cell effect
+                button_x, button_y = cell_effect[1]
+                
+                # Reset the maze and pass the button position
+                self.maze.reset_maze((button_x, button_y))
+                
+                # Get player's current cell position
                 player_cell_x = self.player.rect.centerx // CELL_SIZE
                 player_cell_y = self.player.rect.centery // CELL_SIZE
-                
-                # Reset the maze
-                self.maze.reset_maze((player_cell_x, player_cell_y))  # Pass button position
                 
                 # Find safe position for player
                 safe_x, safe_y = self.find_nearest_valid_position(player_cell_x, player_cell_y)

@@ -140,7 +140,7 @@ class Maze:
     
     def reset_maze(self, triggered_button_pos=None):
         """Reorganize the maze walls and move reset buttons"""
-        # Reset all walls
+        # Reset all walls and cell states
         for x in range(self.cols):
             for y in range(self.rows):
                 self.grid[x][y].walls = {'top': True, 'right': True, 'bottom': True, 'left': True}
@@ -163,7 +163,11 @@ class Maze:
                 self.grid[x][y].visited = True
                 walls.extend(self.get_wall_list(self.grid[x][y], self.grid))
         
-        # Move reset buttons to new locations
+        # Reset special effects (including teleports)
+        self.special_effects = SpecialEffects(self)
+        self.special_effects.generate_special_cells()
+        
+        # Don't place a button where the triggering button was
         self.relocate_reset_buttons(triggered_button_pos)
 
     def relocate_reset_buttons(self, exclude_pos=None):
