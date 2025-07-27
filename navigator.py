@@ -59,11 +59,26 @@ class ChildBot:
         return self.mother.find_path(start, end)
     
     def explore(self):
-        """Explore the maze with quadrant-based targeting"""
+        """Enhanced exploration with better cell checking"""
         current_cell = (int(self.position[0] // CELL_SIZE), 
                        int(self.position[1] // CELL_SIZE))
         
-        # Check if stuck
+        # Check surrounding cells for exit
+        for dx in range(-1, 2):
+            for dy in range(-1, 2):
+                check_x = current_cell[0] + dx
+                check_y = current_cell[1] + dy
+                if (0 <= check_x < self.mother.maze.cols and 
+                    0 <= check_y < self.mother.maze.rows):
+                    cell = self.mother.maze.grid[check_x][check_y]
+                    if cell.type == CellType.EXIT:
+                        self.knowledge["exit"] = (check_x, check_y)
+                        self.found_exit = True
+                        self.share_knowledge()
+                        self.state = "reporting"
+                        return
+
+        # Rest of explore logic
         if math.dist(self.position, self.last_position) < 2:
             self.stuck_timer += 1
             if self.stuck_timer > 60:  # ~1 second of being stuck
@@ -285,32 +300,44 @@ class ChildBot:
                                                         self.knowledge["exit"])
 
     def update(self, current_time):
-        """Improved update with state verification"""
-        # Debug current state
-        if random.random() < 0.01:  # Occasionally print state
-            print(f"Child state: {self.state}, Exit found: {self.found_exit}")
+        """Improved update with better exit detection"""
+        # Check current cell for exit
+        current_cell = (
+            int(self.position[0] // CELL_SIZE),
+            int(self.position[1] // CELL_SIZE)
+        )
         
+        # Always check current cell for special types
+        if (0 <= current_cell[0] < self.mother.maze.cols and 
+            0 <= current_cell[1] < self.mother.maze.rows):
+            self.update_knowledge(current_cell)
+            self.mother.explored_cells.add(current_cell)
+            
+            # Immediately check if we found exit
+            cell = self.mother.maze.grid[current_cell[0]][current_cell[1]]
+            if cell.type == CellType.EXIT:
+                print(f"Child bot found exit at {current_cell}")  # Debug
+                self.knowledge["exit"] = current_cell
+                self.found_exit = True
+                self.share_knowledge()  # Share immediately
+                self.state = "reporting"  # Change state to report back
+    
         # Share knowledge periodically
         if current_time - self.last_knowledge_share > self.knowledge_sharing_interval:
             self.share_knowledge()
             self.last_knowledge_share = current_time
         
-        # Update explored cells
-        current_cell = (
-            int(self.position[0] // CELL_SIZE),
-            int(self.position[1] // CELL_SIZE)
-        )
-        if (0 <= current_cell[0] < self.mother.maze.cols and 
-            0 <= current_cell[1] < self.mother.maze.rows):
-            self.mother.explored_cells.add(current_cell)
+        # State handling with priority to exit reporting
+        if self.found_exit and self.state != "reporting":
+            print("Found exit, switching to reporting state")  # Debug
+            self.state = "reporting"
         
-        # State handling with priority to reporting
         if self.state == "reporting":
             self.report_to_mother()
         elif self.state == "exploring":
             self.explore()
         elif self.state == "returning":
-            if not self.found_exit:  # Only return if we haven't found exit yet
+            if not self.found_exit:
                 self.report_to_mother()
     
     def find_new_exploration_target(self):
