@@ -6,6 +6,8 @@ class Camera:
         self.true_offset = pygame.Vector2(0, 0)
         self.display_offset = pygame.Vector2(0, 0)
         self.zoom = CAMERA_ZOOM
+        self.width = SCREEN_WIDTH
+        self.height = SCREEN_HEIGHT
         
     def follow(self, target):
         # Calculate target position centered on screen
@@ -35,4 +37,13 @@ class Camera:
         return (
             (pos[0] - self.display_offset.x) * self.zoom,
             (pos[1] - self.display_offset.y) * self.zoom
+        )
+
+    def get_visible_rect(self):
+        """Return pygame.Rect of visible area in world coordinates"""
+        return pygame.Rect(
+            self.display_offset.x,  # Use display_offset instead of x
+            self.display_offset.y,  # Use display_offset instead of y
+            self.width / self.zoom,
+            self.height / self.zoom
         )

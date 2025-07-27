@@ -140,9 +140,9 @@ class Game:
         self.door_system.update(pygame.time.get_ticks())
         
         # Check door collisions
-        if self.door_system.check_collision(self.player.rect):
-            # Player hits a closed door
-            self.player.take_damage(10)
+        # if self.door_system.check_collision(self.player.rect):
+        #     # Player hits a closed door
+        #     self.player.take_damage(10)
         
         # Check for special cell effects
         cell_effect = self.maze.special_effects.check_special_cells(self.player.rect)

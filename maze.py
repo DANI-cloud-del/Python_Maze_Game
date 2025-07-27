@@ -84,14 +84,20 @@ class Maze:
                     self.grid[x][y].type = CellType.BUTTON
                     break
 
-    def generate_enemies(self, enemy_count):
-        """Generate enemies at random positions"""
-        for _ in range(enemy_count):
+    def generate_enemies(self, count):
+        """Generate enemies away from start position"""
+        self.enemies = []
+        min_distance = 5  # Minimum distance from start position
+        
+        for _ in range(count):
             while True:
-                x, y = random.randint(0, self.cols-1), random.randint(0, self.rows-1)
-                # Ensure enemies aren't too close to start
-                if abs(x - self.start_pos[0]) + abs(y - self.start_pos[1]) > 10:
-                    self.enemies.append(Enemy(x, y))
+                x = random.randint(0, self.cols-1)
+                y = random.randint(0, self.rows-1)
+                
+                # Check distance from start
+                if (abs(x - self.start_pos[0]) + abs(y - self.start_pos[1])) >= min_distance:
+                    # Pass self as maze reference
+                    self.enemies.append(Enemy(x, y, self))
                     break
 
     def opposite_wall(self, wall):
