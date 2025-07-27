@@ -58,7 +58,7 @@ class Game:
         self.game_time = 0
         self.navigator = Navigator(self.maze)
         self.navigator.set_algorithm(self.settings["algorithm"])
-        self.show_navigator = False
+        self.show_navigator = True
         self.current_algorithm = self.settings["algorithm"]
         
     def handle_events(self):
@@ -72,14 +72,15 @@ class Game:
                     sys.exit()
                 elif self.state != GameState.RUNNING and event.key == pygame.K_r:
                     self.reset_game()
-                elif event.key == pygame.K_n:  # Toggle navigator
-                    self.show_navigator = not self.show_navigator
-                    self.navigator.visible = self.show_navigator
-                    if self.show_navigator:
+                elif event.key == pygame.K_n:  # Toggle between follow/pathfinding modes
+                    self.navigator.toggle_follow_mode()
+                    # Force path recalculation when switching to pathfinding
+                    if not self.navigator.follow_mode:
                         self.navigator.update(
                             (self.player.rect.centerx, self.player.rect.centery),
                             self.player.direction,
-                            pygame.time.get_ticks()
+                            pygame.time.get_ticks(),
+                            True  # Force recalculate
                         )
                 elif event.key == pygame.K_f:  # Toggle follow mode
                     if self.show_navigator:
@@ -379,8 +380,15 @@ class Game:
         
         # Algorithm and follow mode info
         if self.show_navigator:
+            # Convert internal name to display name
+            algo_display = {
+                "a_star": "A*",
+                "dfs": "DFS",
+                "bfs": "BFS"
+            }.get(self.current_algorithm, self.current_algorithm.upper())
+            
             algo_text = font_small.render(
-                f"Algorithm: {self.current_algorithm.upper()} | Follow: {'ON' if self.navigator.follow_mode else 'OFF'}", 
+                f"Algorithm: {algo_display} | Follow: {'ON' if self.navigator.follow_mode else 'OFF'}",
                 True, (200, 200, 200))
             self.screen.blit(algo_text, (20, SCREEN_HEIGHT - 30))
     

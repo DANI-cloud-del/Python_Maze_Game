@@ -37,7 +37,13 @@ class Navigator:
             )
         
     def set_algorithm(self, algorithm):
-        self.algorithm = algorithm
+        """Set the pathfinding algorithm with proper name handling"""
+        # Convert to lowercase and handle special cases
+        algo = algorithm.lower()
+        if algo == "a*" or algo == "a_star" or algo == "astar":
+            self.algorithm = "a_star"  # Store internally as "a_star"
+        else:
+            self.algorithm = algo  # Store other algorithms as lowercase
         
     def check_for_enemies(self, current_time):
         """Check if enemies are nearby and update color accordingly"""
@@ -64,12 +70,12 @@ class Navigator:
         self.current_color = self.alert_color if enemy_nearby else self.normal_color
     
     def find_path(self, start, end):
-        if self.algorithm == "dfs":
-            return self.dfs(start, end)
-        elif self.algorithm == "bfs":
-            return self.bfs(start, end)
-        elif self.algorithm == "a_star":
+        if self.algorithm.lower() == "a_star":  # Force lowercase comparison
             return self.a_star(start, end)
+        elif self.algorithm.lower() == "dfs":
+            return self.dfs(start, end)
+        elif self.algorithm.lower() == "bfs":
+            return self.bfs(start, end)
         return []
     
     def dfs(self, start, end):

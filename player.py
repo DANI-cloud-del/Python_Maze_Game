@@ -2,6 +2,7 @@ import pygame
 from utils.settings import *
 from enum import Enum
 from shooting import ShootingSystem
+import math
 
 
 class PlayerState(Enum):
@@ -33,6 +34,10 @@ class Player:
         self.max_jump = CELL_SIZE // 2
         self.on_ground = True
         self.jump_cooldown = 0
+        self.damage_effect_time = 0
+        self.damage_effect_duration = 300  # milliseconds
+        self.normal_color = (255, 215, 0)  # Gold (original color)
+        self.damage_color = (255, 50, 50)  # Red when damaged
     
     def create_light_mask(self):
         mask = pygame.Surface((LIGHT_RADIUS*2, LIGHT_RADIUS*2), pygame.SRCALPHA)
@@ -129,6 +134,7 @@ class Player:
         if current_time - self.last_damage_time > self.invulnerable_time:
             self.health = max(0, self.health - amount)
             self.last_damage_time = current_time
+            self.damage_effect_time = current_time  # Start damage effect
             return True
         return False
         
@@ -138,42 +144,92 @@ class Player:
             self.state = PlayerState.NORMAL
         elif self.state == PlayerState.TELEPORTING and current_time - self.state_timer > 500:
             self.state = PlayerState.NORMAL
+        if current_time - self.damage_effect_time > self.damage_effect_duration:
+            self.damage_effect_time = 0
     
     def draw(self, screen, camera):
         adjusted_pos = camera.apply_pos(self.rect.center)
+        current_time = pygame.time.get_ticks()
         
-        # Draw player with state indication
+        # Damage flash effect calculation
+        is_damaged = (current_time - self.last_damage_time < self.invulnerable_time)
+        flash_progress = 0
+        damage_flash_color = None
+        
+        if is_damaged:
+            flash_progress = (current_time - self.last_damage_time) / self.invulnerable_time
+            # Create pulsing red effect that fades out
+            pulse_intensity = 0.5 + 0.5 * math.sin(flash_progress * 20)  # 20 controls flash speed
+            damage_flash_color = (
+                min(255, int(255 * pulse_intensity)),
+                max(0, int(215 * (1 - pulse_intensity * 0.7))),  # Keep some gold hue
+                max(0, int(50 * (1 - pulse_intensity)))
+            )
+        
+        # Determine base color based on state
         if self.state == PlayerState.TRAPPED:
-            color = (255, 100, 100)  # Hurt color
+            base_color = (255, 100, 100)  # Hurt color
         elif self.state == PlayerState.TELEPORTING:
-            color = (100, 255, 255)  # Teleporting color
+            base_color = (100, 255, 255)  # Teleporting color
         else:
-            color = (255, 215, 0)  # Normal gold color
-            
-        pygame.draw.circle(screen, color, 
-                         adjusted_pos, 
-                         PLAYER_SIZE//2 * camera.zoom)
+            base_color = (255, 215, 0)  # Normal gold color
+        
+        # Blend with damage flash if needed
+        if is_damaged:
+            # Blend between base color and damage flash
+            blend_factor = 0.3 + 0.7 * (1 - flash_progress)  # More flash at start
+            color = (
+                int(base_color[0] * (1 - blend_factor) + damage_flash_color[0] * blend_factor),
+                int(base_color[1] * (1 - blend_factor) + damage_flash_color[1] * blend_factor),
+                int(base_color[2] * (1 - blend_factor) + damage_flash_color[2] * blend_factor)
+            )
+        else:
+            color = base_color
+        
+        # Draw player
+        pygame.draw.circle(screen, color, adjusted_pos, PLAYER_SIZE//2 * camera.zoom)
+        
+        # Draw shooting system (bullets)
         self.shooting_system.draw(screen, camera)
         
-        # Draw direction indicator
+        # Draw direction indicator (slightly dimmed when damaged)
+        direction_color = (255, 100, 0) if not is_damaged else (
+            min(255, 255 * (1 + flash_progress)),
+            100,
+            0
+        )
         direction_pos = (
             adjusted_pos[0] + self.direction.x * PLAYER_SIZE//2 * camera.zoom,
             adjusted_pos[1] + self.direction.y * PLAYER_SIZE//2 * camera.zoom
         )
-        pygame.draw.circle(screen, (255, 100, 0), direction_pos, PLAYER_SIZE//4 * camera.zoom)
+        pygame.draw.circle(screen, direction_color, direction_pos, PLAYER_SIZE//4 * camera.zoom)
         
-        # Draw battery indicator
+        # Draw battery indicator (flashes when damaged)
         battery_width = 30 * camera.zoom
         battery_height = 5 * camera.zoom
         battery_pos = (adjusted_pos[0] - battery_width//2, adjusted_pos[1] - 20 * camera.zoom)
         
-        # Battery outline
+        # Battery outline (thicker when damaged)
+        outline_thickness = 2 if is_damaged else 1
         pygame.draw.rect(screen, (200, 200, 200), 
-                        (battery_pos[0], battery_pos[1], battery_width, battery_height), 1)
+                        (battery_pos[0], battery_pos[1], battery_width, battery_height), 
+                        outline_thickness)
         
-        # Battery level
+        # Battery level with damage flash effect
         fill_width = max(0, (battery_width-2) * self.torch_battery / 100)
-        battery_color = (0, 255, 0) if self.torch_battery > 30 else (255, 0, 0)
+        if self.torch_battery > 30:
+            battery_color = (0, 255, 0) if not is_damaged else (
+                int(255 * flash_progress),
+                255,
+                int(255 * flash_progress)
+            )
+        else:
+            battery_color = (255, 0, 0) if not is_damaged else (
+                255,
+                int(255 * flash_progress),
+                int(255 * flash_progress)
+            )
+        
         pygame.draw.rect(screen, battery_color,
                         (battery_pos[0]+1, battery_pos[1]+1, fill_width, battery_height-2))
         
