@@ -213,6 +213,8 @@ class Game:
             if (enemy.x == player_cell_x and enemy.y == player_cell_y and 
                 not self.player.light_on):
                 if self.player.take_damage(30):
+                    pass
+                if self.player.health <= 0:
                     self.state = GameState.GAME_OVER
 
         # Update navigator

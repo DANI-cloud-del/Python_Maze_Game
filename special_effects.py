@@ -12,67 +12,90 @@ class SpecialEffects:
         self.used_teleports = set()  # To track used teleports
     
     def generate_special_cells(self):
+        # Set exit cell
         exit_x, exit_y = self.maze.exit_pos
         self.maze.grid[exit_x][exit_y].type = CellType.EXIT
         
-        # Generate traps (3% of cells)
-        trap_count = int(self.maze.cols * self.maze.rows * 0.03)
-        for _ in range(trap_count):
-            while True:
-                x, y = random.randint(0, self.maze.cols-1), random.randint(0, self.maze.rows-1)
-                if ((x,y) != self.maze.start_pos and (x,y) != self.maze.exit_pos and
-                    abs(x - exit_x) + abs(y - exit_y) > 5 and
-                    abs(x - self.maze.start_pos[0]) + abs(y - self.maze.start_pos[1]) > 5):
-                    self.maze.grid[x][y].type = CellType.TRAP
-                    break
+        # Track all special cell positions for spacing
+        special_cell_positions = [(exit_x, exit_y), self.maze.start_pos]
+        min_distance = 5  # Minimum cells between special items
         
-        # Generate teleporters (3 pairs)
-        teleport_count = 3
+        def is_valid_position(x, y):
+            # Check minimum distance from other special cells
+            for (px, py) in special_cell_positions:
+                if abs(x - px) + abs(y - py) < min_distance:
+                    return False
+            return (x,y) != self.maze.start_pos and (x,y) != self.maze.exit_pos
+        
+        # Generate traps (2% of cells)
+        trap_count = int(self.maze.cols * self.maze.rows * 0.02)
+        for _ in range(trap_count):
+            attempts = 0
+            while attempts < 100:
+                x, y = random.randint(0, self.maze.cols-1), random.randint(0, self.maze.rows-1)
+                if is_valid_position(x, y):
+                    self.maze.grid[x][y].type = CellType.TRAP
+                    special_cell_positions.append((x, y))
+                    break
+                attempts += 1
+        
+        # Generate teleporters (2 pairs)
+        teleport_count = 2
         valid_positions = []
         for x in range(self.maze.cols):
             for y in range(self.maze.rows):
-                if (x,y) != self.maze.start_pos and (x,y) != self.maze.exit_pos:
-                    if not (x in [0, self.maze.cols-1] and y in [0, self.maze.rows-1]):
-                        valid_positions.append((x,y))
+                if is_valid_position(x, y):
+                    valid_positions.append((x,y))
         
         random.shuffle(valid_positions)
         
         for i in range(0, teleport_count*2, 2):
-            x1, y1 = valid_positions[i]
-            x2, y2 = valid_positions[i+1]
-            
-            self.maze.grid[x1][y1].type = CellType.TELEPORT
-            self.maze.grid[x1][y1].linked_teleport = (x2, y2)
-            self.maze.grid[x2][y2].type = CellType.TELEPORT
-            self.maze.grid[x2][y2].linked_teleport = (x1, y1)
-            self.teleport_pairs.append(((x1,y1), (x2,y2)))
+            if i+1 < len(valid_positions):
+                x1, y1 = valid_positions[i]
+                x2, y2 = valid_positions[i+1]
+                
+                self.maze.grid[x1][y1].type = CellType.TELEPORT
+                self.maze.grid[x1][y1].linked_teleport = (x2, y2)
+                self.maze.grid[x2][y2].type = CellType.TELEPORT
+                self.maze.grid[x2][y2].linked_teleport = (x1, y1)
+                self.teleport_pairs.append(((x1,y1), (x2,y2)))
+                special_cell_positions.extend([(x1,y1), (x2,y2)])
         
-        # Generate buttons
-        button_count = 3
-        for _ in range(button_count):
-            while True:
-                x, y = random.randint(0, self.maze.cols-1), random.randint(0, self.maze.rows-1)
-                if (x,y) != self.maze.start_pos and (x,y) != self.maze.exit_pos and self.maze.grid[x][y].type == CellType.NORMAL:
-                    self.maze.grid[x][y].type = CellType.BUTTON
-                    break
-        
-        # Generate battery pickups
-        battery_count = 5
+        # Generate batteries (3)
+        battery_count = 3
         for _ in range(battery_count):
-            while True:
+            attempts = 0
+            while attempts < 100:
                 x, y = random.randint(0, self.maze.cols-1), random.randint(0, self.maze.rows-1)
-                if self.maze.grid[x][y].type == CellType.NORMAL:
+                if is_valid_position(x, y) and self.maze.grid[x][y].type == CellType.NORMAL:
                     self.maze.grid[x][y].type = CellType.BATTERY
+                    special_cell_positions.append((x,y))
                     break
+                attempts += 1
         
-        # Generate ammo pickups
-        ammo_count = 5
+        # Generate ammo (3)
+        ammo_count = 3
         for _ in range(ammo_count):
-            while True:
+            attempts = 0
+            while attempts < 100:
                 x, y = random.randint(0, self.maze.cols-1), random.randint(0, self.maze.rows-1)
-                if self.maze.grid[x][y].type == CellType.NORMAL:
+                if is_valid_position(x, y) and self.maze.grid[x][y].type == CellType.NORMAL:
                     self.maze.grid[x][y].type = CellType.AMMO
+                    special_cell_positions.append((x,y))
                     break
+                attempts += 1
+        
+        # Generate buttons (2)
+        button_count = 2
+        for _ in range(button_count):
+            attempts = 0
+            while attempts < 100:
+                x, y = random.randint(0, self.maze.cols-1), random.randint(0, self.maze.rows-1)
+                if is_valid_position(x, y) and self.maze.grid[x][y].type == CellType.NORMAL:
+                    self.maze.grid[x][y].type = CellType.BUTTON
+                    special_cell_positions.append((x,y))
+                    break
+                attempts += 1
     
     def check_special_cells(self, player_rect):
         x = player_rect.centerx // CELL_SIZE

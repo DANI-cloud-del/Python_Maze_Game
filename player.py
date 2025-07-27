@@ -65,30 +65,38 @@ class Player:
         # Toggle light
         if keys[pygame.K_f]:
             self.light_on = not self.light_on
-        
+        # To:
+        if keys[pygame.K_l]:  # Use 'L' for light toggle instead of 'F'
+            self.light_on = not self.light_on
+            
     def move(self, maze):
         if self.state != PlayerState.NORMAL:
             return
             
-        # Handle jumping
+        # Handle jumping physics
         if self.jumping:
-            self.jump_height += 4
+            self.jump_height += 8  # Increased jump speed
             if self.jump_height >= self.max_jump:
                 self.jumping = False
         elif not self.on_ground:
-            self.jump_height = max(0, self.jump_height - 4)
+            self.jump_height = max(0, self.jump_height - 8)  # Gravity
             
+        # Apply movement
         new_rect = self.rect.copy()
         new_rect.x += self.direction.x * self.speed
         new_rect.y += self.direction.y * self.speed - self.jump_height
         
-        if not self.check_collision(new_rect, maze):
-            self.rect = new_rect
-            self.on_ground = (self.jump_height == 0)
+        # Only check wall collisions when not jumping over them
+        if not self.jumping or self.check_collision(new_rect, maze):
+            if not self.check_collision(new_rect, maze):
+                self.rect = new_rect
+                self.on_ground = (self.jump_height == 0)
+            else:
+                self.on_ground = True
+                self.jump_height = 0
+                self.jumping = False
         else:
-            self.on_ground = True
-            self.jump_height = 0
-            self.jumping = False
+            self.rect = new_rect
         
         # Update torch battery
         if self.light_on:
@@ -189,7 +197,48 @@ class Player:
             self.shooting_system.shoot(mouse_pos, current_time)
 
     def jump(self):
-        if self.on_ground and pygame.time.get_ticks() > self.jump_cooldown:
+        if self.on_ground and not self.jumping:
             self.jumping = True
             self.on_ground = False
+            self.jump_height = 0
             self.jump_cooldown = pygame.time.get_ticks() + 1000
+
+    def move(self, maze):
+        if self.state != PlayerState.NORMAL:
+            return
+            
+        # Handle jumping physics
+        if self.jumping:
+            self.jump_height += 10  # Increased jump speed
+            if self.jump_height >= self.max_jump:
+                self.jumping = False
+        elif not self.on_ground:
+            self.jump_height = max(0, self.jump_height - 10)  # Gravity
+            
+        # Calculate movement with jump
+        move_x = self.direction.x * self.speed * (2 if self.jumping else 1)  # Double speed when jumping
+        move_y = self.direction.y * self.speed * (2 if self.jumping else 1) - self.jump_height
+        
+        new_rect = self.rect.copy()
+        new_rect.x += move_x
+        new_rect.y += move_y
+        
+        # Only check wall collisions when not jumping over them
+        if not self.jumping or self.check_collision(new_rect, maze):
+            if not self.check_collision(new_rect, maze):
+                self.rect = new_rect
+                self.on_ground = (self.jump_height == 0)
+            else:
+                self.on_ground = True
+                self.jump_height = 0
+                self.jumping = False
+        else:
+            self.rect = new_rect
+        
+        # Update torch battery
+        if self.light_on:
+            self.torch_battery = max(0, self.torch_battery - 0.1)
+            if self.torch_battery <= 0:
+                self.light_on = False
+        else:
+            self.torch_battery = min(100, self.torch_battery + 0.05)

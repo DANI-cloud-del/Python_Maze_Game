@@ -8,25 +8,24 @@ class Navigator:
         self.maze = maze
         self.path = []
         self.current_target = None
-        self.visible = False
-        self.position = None
-        self.algorithm = "a_star"  # Default algorithm
-        self.normal_color = (255, 255, 255)  # White
-        self.alert_color = (255, 0, 0)       # Red
+        self.visible = True  # Changed to True by default
+        self.position = (maze.start_pos[0] * CELL_SIZE, maze.start_pos[1] * CELL_SIZE)
+        self.algorithm = "a_star"
+        self.normal_color = (255, 255, 255)
+        self.alert_color = (255, 0, 0)
         self.current_color = self.normal_color
         self.last_enemy_check = 0
-        self.enemy_check_interval = 500  # ms between enemy checks
-        self.follow_distance = 2  # Cells behind player to follow
+        self.enemy_check_interval = 500
+        self.follow_distance = 2
         self.last_player_direction = None
-        self.smooth_position = None  # For smooth movement
-        self.speed = 0.05  # Movement speed (0-1)
-        self.last_player_cell = None  # To track player movement
-        self.current_direction = None  # Current suggested direction
-        self.next_direction = None  # Next suggested direction
-        self.direction_changed = False  # Flag for direction change
-        self.deviation_threshold = 1  # Cells player can deviate before recalculating
+        self.smooth_position = None
+        self.speed = 0.05
+        self.last_player_cell = None
+        self.current_direction = None
+        self.next_direction = None
+        self.direction_changed = False
+        self.deviation_threshold = 1
         self.follow_mode = True  # Start in follow mode by default
-        self.position = (maze.start_pos[0] * CELL_SIZE, maze.start_pos[1] * CELL_SIZE)
 
     def toggle_follow_mode(self):
         """Toggle between pathfinding and follow modes"""
