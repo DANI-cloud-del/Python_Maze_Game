@@ -12,14 +12,16 @@ class Maze:
         self.grid = self.generate_maze()
         self.enemies = []
         self.start_pos = (0, 0)
-        self.exit_pos = (self.cols-1, self.rows-1)
+        # Random exit position in the far half of the maze
+        self.exit_pos = (random.randint(self.cols//2, self.cols-1), 
+                        random.randint(self.rows//2, self.rows-1))
         self.reset_time = 0
         self.reset_cooldown = 10000
         self.trap_damage = trap_damage
-        self.special_effects = SpecialEffects(self)  # Add this line
+        self.special_effects = SpecialEffects(self)
         self.generate_enemies(enemy_count)
-        self.special_effects.generate_special_cells()  # Add this line
-
+        self.special_effects.generate_special_cells()
+        
     def generate_maze(self):
         grid = [[Cell(x, y) for y in range(self.rows)] for x in range(self.cols)]
         
