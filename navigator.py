@@ -594,11 +594,10 @@ class Navigator:
 
     def set_algorithm(self, algorithm):
         """Set the pathfinding algorithm"""
-        algo = algorithm.lower()
-        if algo == "a*" or algo == "a_star" or algo == "astar":
-            self.algorithm = "a_star"
-        else:
-            self.algorithm = algo
+        algo = algorithm.lower().replace(" ", "_").replace("*", "star")
+        if algo == "greedy_best-first":
+            algo = "greedy"
+        self.algorithm = algo
 
     def check_for_enemies(self, current_time):
         """Check for nearby enemies and update alert status"""
@@ -630,6 +629,8 @@ class Navigator:
             return self.bfs(start, end)
         elif self.algorithm == "a_star":
             return self.a_star(start, end)
+        elif self.algorithm == "greedy":  # Add this case
+            return self.greedy_best_first(start, end)
         return []
 
     def dfs(self, start, end):
@@ -696,6 +697,31 @@ class Navigator:
                         new_cost = cost + 1
                         heapq.heappush(heap, (new_cost + heuristic((nx, ny), end), 
                                      (nx, ny), path + [(nx, ny)]))
+        return []
+
+    def greedy_best_first(self, start, end):
+        """Greedy Best-First search with Manhattan distance heuristic"""
+        def heuristic(a, b):
+            return abs(a[0] - b[0]) + abs(a[1] - b[1])
+            
+        heap = []
+        heapq.heappush(heap, (heuristic(start, end), start, [start]))
+        visited = set()
+        
+        while heap:
+            _, (x, y), path = heapq.heappop(heap)
+            if (x, y) == end:
+                return path
+            if (x, y) not in visited:
+                visited.add((x, y))
+                for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
+                    nx, ny = x + dx, y + dy
+                    if (0 <= nx < self.maze.cols and 0 <= ny < self.maze.rows and 
+                        not self.maze.grid[x][y].walls[
+                            'right' if dx == 1 else 'left' if dx == -1 else 
+                            'bottom' if dy == 1 else 'top']):
+                        heapq.heappush(heap, (heuristic((nx, ny), end), 
+                                    (nx, ny), path + [(nx, ny)]))
         return []
 
     def calculate_follow_position(self, player_pos, player_direction):

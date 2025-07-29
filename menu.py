@@ -69,19 +69,19 @@ class GameMenu:
         # Menu options
         self.options = {
             "main": ["Start Game", "Select Algorithm", "Select Difficulty", "Quit"],
-            "algorithm_type": ["Search-Based", "Non-Search-Based"],
-            "search_algorithms": ["DFS", "BFS", "A*", "Dijkstra"],
-            "non_search_algorithms": ["Wall-Follower", "Random Walk", "Potential Fields", "Genetic"],
+            "algorithm_type": ["Informed Search", "Uninformed Search"],
+            "informed_search": ["BFS", "DFS"],
+            "uninformed_search": ["A*", "Greedy Best-First"],
             "difficulty": ["Easy", "Medium", "Hard"]
         }
-        
-        # Cursor positions
+
+        # Update the cursor_pos dictionary:
         self.cursor_pos = {
             "main": 0,
             "algorithm_type": 0,
-            "search_algorithms": 0,
-            "non_search_algorithms": 0,
-            "difficulty": 1  # Default to Medium
+            "informed_search": 0,
+            "uninformed_search": 0,
+            "difficulty": 1
         }
         
         # Difficulty settings
@@ -141,14 +141,15 @@ class GameMenu:
                 color = self.colors["highlight"] if i == self.cursor_pos["algorithm_type"] else self.colors["normal"]
                 self.draw_text(option, self.menu_font, color, 80 + i * 50)
                 
-        elif self.state in ["search_algorithms", "non_search_algorithms"]:
-            algo_type = "Search-Based" if self.state == "search_algorithms" else "Non-Search-Based"
+        elif self.state in ["informed_search", "uninformed_search"]:
+            algo_type = "Informed Search" if self.state == "informed_search" else "Uninformed Search"
             self.draw_text(algo_type, self.menu_font, self.colors["title"], 50)
             
             algorithms = self.options[self.state]
             for i, algo in enumerate(algorithms):
                 color = self.colors["highlight"] if i == self.cursor_pos[self.state] else self.colors["normal"]
                 self.draw_text(algo, self.submenu_font, color, 120 + i * 40)
+
                 
         elif self.state == "difficulty":
             for i, option in enumerate(self.options["difficulty"]):
@@ -190,10 +191,10 @@ class GameMenu:
             self.cursor_pos["main"] = (self.cursor_pos["main"] + direction) % len(self.options["main"])
         elif self.state == "algorithm_type":
             self.cursor_pos["algorithm_type"] = (self.cursor_pos["algorithm_type"] + direction) % len(self.options["algorithm_type"])
-        elif self.state == "search_algorithms":
-            self.cursor_pos["search_algorithms"] = (self.cursor_pos["search_algorithms"] + direction) % len(self.options["search_algorithms"])
-        elif self.state == "non_search_algorithms":
-            self.cursor_pos["non_search_algorithms"] = (self.cursor_pos["non_search_algorithms"] + direction) % len(self.options["non_search_algorithms"])
+        elif self.state == "informed_search":
+            self.cursor_pos["informed_search"] = (self.cursor_pos["informed_search"] + direction) % len(self.options["informed_search"])
+        elif self.state == "uninformed_search":
+            self.cursor_pos["uninformed_search"] = (self.cursor_pos["uninformed_search"] + direction) % len(self.options["uninformed_search"])
         elif self.state == "difficulty":
             self.cursor_pos["difficulty"] = (self.cursor_pos["difficulty"] + direction) % len(self.options["difficulty"])
 
@@ -211,19 +212,19 @@ class GameMenu:
                 sys.exit()
                 
         elif self.state == "algorithm_type":
-            if self.cursor_pos["algorithm_type"] == 0:  # Search-Based
-                self.state = "search_algorithms"
-                self.algorithm_type = "search"
-            else:  # Non-Search-Based
-                self.state = "non_search_algorithms"
-                self.algorithm_type = "non-search"
+            if self.cursor_pos["algorithm_type"] == 0:  # Informed Search
+                self.state = "informed_search"
+                self.algorithm_type = "informed"
+            else:  # Uninformed Search
+                self.state = "uninformed_search"
+                self.algorithm_type = "uninformed"
                 
-        elif self.state == "search_algorithms":
-            self.selected_algorithm = self.options["search_algorithms"][self.cursor_pos["search_algorithms"]]
+        elif self.state == "informed_search":
+            self.selected_algorithm = self.options["informed_search"][self.cursor_pos["informed_search"]]
             self.state = "main"
             
-        elif self.state == "non_search_algorithms":
-            self.selected_algorithm = self.options["non_search_algorithms"][self.cursor_pos["non_search_algorithms"]]
+        elif self.state == "uninformed_search":
+            self.selected_algorithm = self.options["uninformed_search"][self.cursor_pos["uninformed_search"]]
             self.state = "main"
             
         elif self.state == "difficulty":
@@ -234,8 +235,15 @@ class GameMenu:
 
     def get_game_settings(self):
         """Returns the selected settings for game initialization"""
+        algorithm_map = {
+            "BFS": "bfs",
+            "DFS": "dfs",
+            "A*": "a_star",
+            "Greedy Best-First": "greedy",
+        }
+        
         return {
-            "algorithm": self.selected_algorithm.lower().replace("*", "star").replace("-", "_"),
+            "algorithm": algorithm_map.get(self.selected_algorithm, "a_star"),
             "difficulty": self.selected_difficulty.lower(),
             "enemy_count": self.difficulty_settings[self.selected_difficulty]["enemies"],
             "maze_size": self.difficulty_settings[self.selected_difficulty]["maze_size"],
